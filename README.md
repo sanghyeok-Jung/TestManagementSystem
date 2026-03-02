@@ -45,7 +45,7 @@ This repository is structured as a **Turborepo** monorepo containing the followi
 Clone the repository and install all dependencies from the root directory:
 
 ```bash
-git clone https://github.com/your-org/TestManagementSystem.git
+git clone https://github.com/sanghyeok-Jung/TestManagementSystem.git
 cd TestManagementSystem
 npm install
 ```

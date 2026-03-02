@@ -1,0 +1,32 @@
+{
+    "name": "agent",
+    "version": "0.0.0",
+    "scripts": {
+        "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js"
+    },
+    "dependencies": {
+        "@qa/types": "*",
+        "@types/form-data": "^2.2.1",
+        "adm-zip": "^0.5.16",
+        "axios": "^1.13.5",
+        "execa": "^5.0.0",
+        "extract-zip": "^2.0.1",
+        "form-data": "^4.0.5",
+        "fs-extra": "^11.3.3",
+        "ios-device-list": "^1.1.37",
+        "socket.io-client": "^4.0.0",
+        "ws": "^8.18.3"
+    },
+    "devDependencies": {
+        "@types/adm-zip": "^0.5.7",
+        "@types/axios": "^0.9.36",
+        "@types/extract-zip": "^2.0.0",
+        "@types/fs-extra": "^11.0.4",
+        "@types/node": "^20.0.0",
+        "@types/ws": "^8.18.1",
+        "ts-node-dev": "^2.0.0",
+        "typescript": "^5.0.0"
+    }
+}

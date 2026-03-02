@@ -1,0 +1,17 @@
+{
+    "name": "qa-web-solution",
+    "private": true,
+    "scripts": {
+        "dev": "turbo run dev",
+        "build": "turbo run build",
+        "lint": "turbo run lint"
+    },
+    "devDependencies": {
+        "turbo": "latest"
+    },
+    "packageManager": "npm@11.3.0",
+    "workspaces": [
+        "apps/*",
+        "packages/*"
+    ]
+}

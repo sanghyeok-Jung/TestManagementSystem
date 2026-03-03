@@ -65,3 +65,36 @@ export interface Project {
   status: 'processing' | 'ready' | 'error' | 'deleting';
   metadata?: ProjectMetadata;
 }
+
+export interface ScriptParameter {
+  key: string;
+  value: string;
+  options?: string[];
+  description?: string;
+  required?: boolean;
+}
+
+export interface SelectedScriptInstance {
+  scriptIndex: number;
+  parameters: ScriptParameter[];
+}
+
+export interface ScheduleTarget {
+  agentId: string;
+  deviceId: string | null; // null means any available device on the agent
+}
+
+export interface TestSchedule {
+  id: string;
+  name: string;
+  scriptId: string;
+  command: string;
+  selectedScripts?: SelectedScriptInstance[];
+  targets: ScheduleTarget[];
+  cronExpression: string; // e.g., "0 9 * * *" for every day at 9 AM
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastRunAt?: number;
+  nextRunAt?: number;
+}

@@ -1,0 +1,9 @@
+{
+    "name": "api-test-sample",
+    "version": "1.0.0",
+    "description": "API Test Sample Project for TMS",
+    "main": "test.js",
+    "scripts": {
+        "test": "node test.js"
+    }
+}

@@ -53,7 +53,7 @@ export class ProjectManager extends EventEmitter {
 
     private async syncProjectMetadata(id: string, saveOnChange = true): Promise<boolean> {
         const project = this.projects.find(p => p.id === id);
-        if (!project || project.status !== 'ready') return false;
+        if (!project || (project.status !== 'ready' && project.status !== 'processing')) return false;
 
         const outputDir = path.join(this.uploadsDir, id);
         if (!fs.existsSync(outputDir)) return false;

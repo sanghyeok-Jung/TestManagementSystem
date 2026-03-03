@@ -1,6 +1,7 @@
 import { io } from 'socket.io-client';
 import { Agent, Device } from '@qa/types';
 import os from 'os';
+import { execSync } from 'child_process';
 import { DeviceWatcher } from './device-watcher';
 import { Streamer } from './streamer';
 import { JobExecutor } from './job-executor';
@@ -18,10 +19,33 @@ const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
 
 const socket = io(SERVER_URL, { transports: ['websocket'] });
 
+const getLocalIpAddress = () => {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name] || []) {
+            if (iface.family === "IPv4" && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return "127.0.0.1";
+};
+const getAgentName = () => {
+    try {
+        if (process.platform === 'darwin') {
+            const name = execSync('scutil --get LocalHostName', { encoding: 'utf8' }).trim();
+            if (name) return name;
+        }
+    } catch (e) { }
+    return os.hostname().split('.')[0];
+};
+
+const agentName = getAgentName();
+
 const agentInfo: Agent = {
-    id: 'agent-' + os.hostname(),
-    hostname: os.hostname(),
-    ip: '127.0.0.1',
+    id: 'agent-' + agentName,
+    hostname: agentName,
+    ip: getLocalIpAddress(),
     devices: [],
     status: 'online'
 };

@@ -16,6 +16,7 @@
 - **📦 Effortless App Installation:** Not just APKs—automatically process and install `.aab` (Android App Bundle) directly to remote devices using local `bundletool`.
 - **🖥️ Integrated Web Shell & Logcat:** Direct access to ADB Shell and real-time scrolling Logcat output for any connected remote device directly in your browser.
 - **🚀 Distributed Job Execution:** Upload test projects as `.zip` and orchestrate test/script execution across multiple agents or devices simultaneously.
+- **⏰ Automated Task Scheduling:** Orchestrate periodic test executions using flexible Cron expressions. Create, manage, and monitor recurring test jobs across specific agents and devices.
 - **🔌 Agent-based Architecture:** Run lightweight Node.js agents on any macOS/Windows machine to connect physical devices instantly to the central hub.
 
 ---

@@ -9,6 +9,7 @@ import { Agent, Device } from '@qa/types';
 import { pipeline } from 'stream/promises';
 import { ProjectManager } from './projects';
 import { JobManager } from './jobs';
+import { ScheduleManager } from './scheduler';
 
 const fastify = Fastify({ logger: true });
 
@@ -25,200 +26,7 @@ fs.ensureDirSync(UPLOAD_DIR);
 const projectManager = new ProjectManager();
 const jobManager = new JobManager();
 
-// HTTP Endpoints
-fastify.get('/api/projects', async (req, reply) => {
-    return projectManager.getAll();
-});
-
-fastify.post('/api/projects', async (req, reply) => {
-    const data = await req.file();
-    if (!data) {
-        return reply.status(400).send({ error: 'No file uploaded' });
-    }
-
-    try {
-        const project = await projectManager.create(data);
-        return project;
-    } catch (error) {
-        req.log.error(error);
-        return reply.status(500).send({ error: 'Failed to create project' });
-    }
-});
-
-fastify.delete('/api/projects/:id', async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const success = await projectManager.delete(id);
-    if (!success) {
-        return reply.status(404).send({ error: 'Project not found' });
-    }
-    return { success: true };
-});
-
-// --- File Endpoints ---
-
-fastify.get('/api/projects/:id/files', async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const files = await projectManager.listFiles(id);
-    return { files };
-});
-
-fastify.get('/api/projects/:id/files/content', async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const { file } = req.query as { file: string };
-
-    if (!file) return reply.status(400).send({ error: 'File path required' });
-
-    const content = await projectManager.readFile(id, file);
-    if (content === null) {
-        return reply.status(404).send({ error: 'File not found or cannot be read' });
-    }
-    return { content };
-});
-
-fastify.put('/api/projects/:id/files/content', async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const { file, content } = req.body as { file: string, content: string };
-
-    if (!file || typeof content !== 'string') {
-        return reply.status(400).send({ error: 'File path and content required' });
-    }
-
-    const success = await projectManager.writeFile(id, file, content);
-    if (!success) {
-        return reply.status(500).send({ error: 'Failed to write file' });
-    }
-    return { success: true };
-});
-
-fastify.delete('/api/projects/:id/files/content', async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const { file } = req.query as { file: string };
-
-    if (!file) return reply.status(400).send({ error: 'File path required' });
-
-    const success = await projectManager.deleteFile(id, file);
-    if (!success) {
-        return reply.status(500).send({ error: 'Failed to delete file' });
-    }
-    return { success: true };
-});
-
-// Legacy Upload Endpoint (Keep for ADB)
-fastify.post('/api/upload', async (req, reply) => {
-    const data = await req.file();
-    if (!data) {
-        return reply.status(400).send({ error: 'No file uploaded' });
-    }
-
-    const filename = `${Date.now()}-${data.filename}`;
-    const filepath = path.join(UPLOAD_DIR, filename);
-
-    await pipeline(data.file, fs.createWriteStream(filepath));
-
-    return {
-        success: true,
-        scriptId: filename,
-        url: `/uploads/${filename}`
-    };
-});
-
-fastify.post('/api/jobs', async (req, reply) => {
-    const { scriptId, agentId, deviceId, command } = req.body as {
-        scriptId: string,
-        agentId: string,
-        deviceId?: string, // Now optional
-        command: string
-    };
-
-    console.log('Starting job:', { scriptId, agentId, deviceId, command });
-
-    // Find Agent Socket
-    // In real app, manage this better
-    const agentSocket = Array.from(io.sockets.sockets.values()).find(s => s.data.agentId === agentId);
-
-    if (!agentSocket) {
-        return reply.status(404).send({ error: 'Agent not found' });
-    }
-
-    const job = jobManager.createJob(scriptId, agentId, command, deviceId);
-
-    // Send Job to Agent
-    agentSocket.emit('start_job', {
-        jobId: job.id,
-        scriptId,
-        deviceId,
-        command,
-        downloadUrl: `http://localhost:3000/api/download/${scriptId}`
-    });
-
-    return { success: true, job };
-});
-
-fastify.get('/api/devices/:deviceId/jobs', async (req, reply) => {
-    const { deviceId } = req.params as { deviceId: string };
-    return jobManager.getJobsForDevice(deviceId);
-});
-
-fastify.get('/api/jobs', async (req, reply) => {
-    return jobManager.getAll();
-});
-
-fastify.get('/api/jobs/:jobId/logs', async (req, reply) => {
-    const { jobId } = req.params as { jobId: string };
-    const logs = await jobManager.getJobLogs(jobId);
-    return { logs };
-});
-
-fastify.get('/api/download/:scriptId', async (req, reply) => {
-    const { scriptId } = req.params as { scriptId: string };
-
-    // Check if it's a project
-    if (scriptId.startsWith('proj-')) {
-        const projectDir = path.join(UPLOAD_DIR, 'projects', scriptId);
-        if (!fs.existsSync(projectDir)) {
-            return reply.status(404).send({ error: 'Project not found' });
-        }
-
-        try {
-            const zip = new AdmZip();
-            // Add everything in the project directory, EXCEPT source.zip
-            const items = await fs.readdir(projectDir, { withFileTypes: true });
-            for (const item of items) {
-                if (item.name === 'source.zip') continue;
-
-                const itemPath = path.join(projectDir, item.name);
-                if (item.isDirectory()) {
-                    zip.addLocalFolder(itemPath, item.name);
-                } else {
-                    zip.addLocalFile(itemPath);
-                }
-            }
-
-            const buffer = zip.toBuffer();
-            reply.header('Content-Type', 'application/zip');
-            return reply.send(buffer);
-        } catch (error) {
-            req.log.error(error);
-            return reply.status(500).send({ error: 'Failed to create project zip' });
-        }
-    }
-
-    // Legacy fallback
-    const filepath = path.join(UPLOAD_DIR, scriptId);
-    if (!fs.existsSync(filepath)) {
-        return reply.status(404).send({ error: 'File not found' });
-    }
-    return reply.send(fs.createReadStream(filepath));
-});
-
-// Stream Relay Logic (Now handled via Socket.io rooms)
-
-// HTTP Server
-fastify.get('/', async (request, reply) => {
-    return { hello: 'world' };
-});
-
-// Socket.io for Control Channel
+// Socket.io for Control Channel (Moved initialization up to pass to ScheduleManager)
 const io = new Server(fastify.server, {
     cors: {
         origin: "*",
@@ -226,6 +34,8 @@ const io = new Server(fastify.server, {
     },
     maxHttpBufferSize: 1e7 // 10MB
 });
+
+const scheduleManager = new ScheduleManager(io, jobManager);
 
 projectManager.on('updated', () => {
     io.emit('projects_updated');
@@ -243,6 +53,17 @@ io.on('connection', (socket) => {
 
     socket.on('register_agent', (agentInfo: Agent) => {
         console.log('Agent registered:', agentInfo.id);
+
+        // Get real IP from socket handshake
+        let realIp = socket.handshake.address;
+        const xForwardedFor = socket.handshake.headers["x-forwarded-for"];
+        if (xForwardedFor) {
+            realIp = Array.isArray(xForwardedFor) ? xForwardedFor[0] : (xForwardedFor as string).split(",")[0];
+        }
+        if (realIp === "::1") realIp = "127.0.0.1";
+        if (realIp && realIp.startsWith("::ffff:")) realIp = realIp.substring(7);
+        agentInfo.ip = realIp || agentInfo.ip;
+
         // Mark as online
         agentInfo.status = 'online';
         agents.set(agentInfo.id, agentInfo);
@@ -434,6 +255,234 @@ io.on('connection', (socket) => {
     socket.on('adb_pull_complete', (data) => forwardToFrontend('adb_pull_complete', data));
     socket.on('adb_install_status', (data) => forwardToFrontend('adb_install_status', data));
 });
+
+// HTTP Endpoints
+fastify.get('/api/projects', async (req, reply) => {
+    return projectManager.getAll();
+});
+
+fastify.post('/api/projects', async (req, reply) => {
+    const data = await req.file();
+    if (!data) {
+        return reply.status(400).send({ error: 'No file uploaded' });
+    }
+
+    try {
+        const project = await projectManager.create(data);
+        return project;
+    } catch (error) {
+        req.log.error(error);
+        return reply.status(500).send({ error: 'Failed to create project' });
+    }
+});
+
+fastify.delete('/api/projects/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const success = await projectManager.delete(id);
+    if (!success) {
+        return reply.status(404).send({ error: 'Project not found' });
+    }
+    return { success: true };
+});
+
+// --- File Endpoints ---
+
+fastify.get('/api/projects/:id/files', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const files = await projectManager.listFiles(id);
+    return { files };
+});
+
+fastify.get('/api/projects/:id/files/content', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { file } = req.query as { file: string };
+
+    if (!file) return reply.status(400).send({ error: 'File path required' });
+
+    const content = await projectManager.readFile(id, file);
+    if (content === null) {
+        return reply.status(404).send({ error: 'File not found or cannot be read' });
+    }
+    return { content };
+});
+
+fastify.put('/api/projects/:id/files/content', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { file, content } = req.body as { file: string, content: string };
+
+    if (!file || typeof content !== 'string') {
+        return reply.status(400).send({ error: 'File path and content required' });
+    }
+
+    const success = await projectManager.writeFile(id, file, content);
+    if (!success) {
+        return reply.status(500).send({ error: 'Failed to write file' });
+    }
+    return { success: true };
+});
+
+fastify.delete('/api/projects/:id/files/content', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { file } = req.query as { file: string };
+
+    if (!file) return reply.status(400).send({ error: 'File path required' });
+
+    const success = await projectManager.deleteFile(id, file);
+    if (!success) {
+        return reply.status(500).send({ error: 'Failed to delete file' });
+    }
+    return { success: true };
+});
+
+// Legacy Upload Endpoint (Keep for ADB)
+fastify.post('/api/upload', async (req, reply) => {
+    const data = await req.file();
+    if (!data) {
+        return reply.status(400).send({ error: 'No file uploaded' });
+    }
+
+    const filename = `${Date.now()}-${data.filename}`;
+    const filepath = path.join(UPLOAD_DIR, filename);
+
+    await pipeline(data.file, fs.createWriteStream(filepath));
+
+    return {
+        success: true,
+        scriptId: filename,
+        url: `/uploads/${filename}`
+    };
+});
+
+fastify.post('/api/jobs', async (req, reply) => {
+    const { scriptId, agentId, deviceId, command } = req.body as {
+        scriptId: string,
+        agentId: string,
+        deviceId?: string, // Now optional
+        command: string
+    };
+
+    console.log('Starting job:', { scriptId, agentId, deviceId, command });
+
+    // Find Agent Socket
+    // In real app, manage this better
+    const agentSocket = Array.from(io.sockets.sockets.values()).find(s => s.data.agentId === agentId);
+
+    if (!agentSocket) {
+        return reply.status(404).send({ error: 'Agent not found' });
+    }
+
+    const job = jobManager.createJob(scriptId, agentId, command, deviceId);
+
+    // Send Job to Agent
+    agentSocket.emit('start_job', {
+        jobId: job.id,
+        scriptId,
+        deviceId,
+        command,
+        downloadUrl: `http://localhost:3000/api/download/${scriptId}`
+    });
+
+    return { success: true, job };
+});
+
+fastify.get('/api/devices/:deviceId/jobs', async (req, reply) => {
+    const { deviceId } = req.params as { deviceId: string };
+    return jobManager.getJobsForDevice(deviceId);
+});
+
+fastify.get('/api/jobs', async (req, reply) => {
+    return jobManager.getAll();
+});
+
+fastify.get('/api/jobs/:jobId/logs', async (req, reply) => {
+    const { jobId } = req.params as { jobId: string };
+    const logs = await jobManager.getJobLogs(jobId);
+    return { logs };
+});
+
+fastify.get('/api/schedules', async (req, reply) => {
+    return scheduleManager.getAll();
+});
+
+fastify.post('/api/schedules', async (req, reply) => {
+    const data = req.body as Parameters<typeof scheduleManager.create>[0];
+    if (!data.name || !data.scriptId || !data.cronExpression || !data.command) {
+        return reply.status(400).send({ error: 'Missing required fields' });
+    }
+    const schedule = scheduleManager.create(data);
+    return { success: true, schedule };
+});
+
+fastify.put('/api/schedules/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const updates = req.body as Parameters<typeof scheduleManager.update>[1];
+    const schedule = scheduleManager.update(id, updates);
+    if (!schedule) {
+        return reply.status(404).send({ error: 'Schedule not found' });
+    }
+    return { success: true, schedule };
+});
+
+fastify.delete('/api/schedules/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const success = scheduleManager.delete(id);
+    if (!success) {
+        return reply.status(404).send({ error: 'Schedule not found' });
+    }
+    return { success: true };
+});
+
+fastify.get('/api/download/:scriptId', async (req, reply) => {
+    const { scriptId } = req.params as { scriptId: string };
+
+    // Check if it's a project
+    if (scriptId.startsWith('proj-')) {
+        const projectDir = path.join(UPLOAD_DIR, 'projects', scriptId);
+        if (!fs.existsSync(projectDir)) {
+            return reply.status(404).send({ error: 'Project not found' });
+        }
+
+        try {
+            const zip = new AdmZip();
+            // Add everything in the project directory, EXCEPT source.zip
+            const items = await fs.readdir(projectDir, { withFileTypes: true });
+            for (const item of items) {
+                if (item.name === 'source.zip') continue;
+
+                const itemPath = path.join(projectDir, item.name);
+                if (item.isDirectory()) {
+                    zip.addLocalFolder(itemPath, item.name);
+                } else {
+                    zip.addLocalFile(itemPath);
+                }
+            }
+
+            const buffer = zip.toBuffer();
+            reply.header('Content-Type', 'application/zip');
+            return reply.send(buffer);
+        } catch (error) {
+            req.log.error(error);
+            return reply.status(500).send({ error: 'Failed to create project zip' });
+        }
+    }
+
+    // Legacy fallback
+    const filepath = path.join(UPLOAD_DIR, scriptId);
+    if (!fs.existsSync(filepath)) {
+        return reply.status(404).send({ error: 'File not found' });
+    }
+    return reply.send(fs.createReadStream(filepath));
+});
+
+// Stream Relay Logic (Now handled via Socket.io rooms)
+
+// HTTP Server
+fastify.get('/', async (request, reply) => {
+    return { hello: 'world' };
+});
+
+
+// Remove residual code so that the app can start normally
 
 const start = async () => {
     try {

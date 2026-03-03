@@ -1,0 +1,19 @@
+{
+    "name": "api-test-sample",
+    "description": "Sample REST API test project using JSONPlaceholder",
+    "scripts": [
+        {
+            "name": "Verify API endpoint operation",
+            "description": "Tests normal operation of REST API endpoints such as addresses and posts.",
+            "command": "npm test",
+            "parameters": [
+                {
+                    "key": "API_URL",
+                    "type": "string",
+                    "defaultValue": "https://jsonplaceholder.typicode.com",
+                    "description": "Target API Base URL for testing"
+                }
+            ]
+        }
+    ]
+}

@@ -6,7 +6,8 @@ import { AgentCard } from './components/AgentCard';
 import { DeviceControlPanel } from './components/DeviceControlPanel';
 import { ScriptRunnerDialog } from './components/ScriptRunnerDialog';
 import { GlobalHistoryDialog } from './components/GlobalHistoryDialog';
-import { Activity, Server, LayoutGrid, Package, History } from 'lucide-react';
+import { SchedulesDialog } from './components/SchedulesDialog';
+import { Activity, Server, LayoutGrid, Package, History, Calendar } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const socket = io({ transports: ['websocket'] });
 export default function App() {
     const [isConnected, setIsConnected] = useState(socket.connected);
     const [agents, setAgents] = useState<Agent[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
 
     useEffect(() => {
         function onConnect() {
@@ -34,7 +36,21 @@ export default function App() {
 
         function onProjectsUpdated() {
             setRefreshProjectsTrigger(prev => prev + 1);
+            fetchProjects(); // Refresh full project list
         }
+
+        async function fetchProjects() {
+            try {
+                const response = await fetch('/api/projects');
+                if (response.ok) {
+                    const data = await response.json();
+                    setProjects(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch projects", error);
+            }
+        }
+        fetchProjects();
 
         socket.on('connect', onConnect);
         socket.on('disconnect', onDisconnect);
@@ -52,6 +68,7 @@ export default function App() {
     const [selectedDevice, setSelectedDevice] = useState<{ agentId: string, deviceId: string, initialTab?: 'control' | 'history' } | null>(null);
     const [scriptRunnerOpen, setScriptRunnerOpen] = useState(false);
     const [globalHistoryOpen, setGlobalHistoryOpen] = useState(false);
+    const [schedulesOpen, setSchedulesOpen] = useState(false);
     const [selectedScriptId, setSelectedScriptId] = useState<string>('');
 
     // Project Management State
@@ -82,6 +99,15 @@ export default function App() {
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSchedulesOpen(true)}
+                                className="h-8 gap-2 px-3 text-slate-600 border-slate-200 hover:bg-slate-50 font-bold text-xs"
+                            >
+                                <Calendar size={14} className="text-blue-500" />
+                                Schedules
+                            </Button>
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -172,6 +198,13 @@ export default function App() {
             </main>
 
             {/* Dialogs */}
+            <SchedulesDialog
+                isOpen={schedulesOpen}
+                onClose={() => setSchedulesOpen(false)}
+                projects={projects}
+                agents={agents}
+            />
+
             <GlobalHistoryDialog
                 isOpen={globalHistoryOpen}
                 onClose={() => setGlobalHistoryOpen(false)}

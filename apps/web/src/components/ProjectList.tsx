@@ -7,6 +7,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Play, Calendar, Loader2, RefreshCw, FileEdit } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from 'sonner';
 import { cn } from "@/lib/utils";
 
@@ -19,6 +26,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ refreshTrigger, onRunP
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [editingProject, setEditingProject] = useState<Project | null>(null);
 
     const fetchProjects = async () => {
@@ -42,8 +50,14 @@ export const ProjectList: React.FC<ProjectListProps> = ({ refreshTrigger, onRunP
 
     const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!window.confirm('Are you sure you want to delete this project?')) return;
+        setDeleteConfirmId(id);
+    };
 
+    const confirmDelete = async () => {
+        if (!deleteConfirmId) return;
+        const id = deleteConfirmId;
+
+        setDeleteConfirmId(null);
         setDeletingId(id);
 
         // Optimistically set status to deleting
@@ -165,6 +179,23 @@ export const ProjectList: React.FC<ProjectListProps> = ({ refreshTrigger, onRunP
                     project={editingProject}
                 />
             )}
+
+            <Dialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Project</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-slate-600">Are you sure you want to delete this project? This action cannot be undone.</p>
+                    <DialogFooter className="mt-4 flex gap-2 justify-end">
+                        <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+                            Cancel
+                        </Button>
+                        <Button variant="destructive" onClick={confirmDelete}>
+                            Delete
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

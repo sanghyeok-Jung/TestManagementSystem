@@ -1,0 +1,52 @@
+{
+    "name": "browser-test-sample",
+    "description": "Sample Browser test project using Playwright",
+    "scripts": [
+        {
+            "name": "Verify Web Page Title",
+            "description": "Opens a URL and verifies the page title with extended options.",
+            "command": "npm test",
+            "parameters": [
+                {
+                    "key": "TARGET_URL",
+                    "type": "string",
+                    "defaultValue": "https://www.google.com",
+                    "description": "Target URL to test"
+                },
+                {
+                    "key": "BROWSER",
+                    "description": "Browser type to run the test on",
+                    "defaultValue": "chromium",
+                    "options": [
+                        "chromium",
+                        "firefox",
+                        "webkit"
+                    ],
+                    "required": true
+                },
+                {
+                    "key": "TEST_ENV",
+                    "description": "Test environment to target",
+                    "defaultValue": "staging",
+                    "options": [
+                        "staging",
+                        "production",
+                        "dev"
+                    ],
+                    "required": true
+                },
+                {
+                    "key": "RETRY_COUNT",
+                    "description": "Number of times to retry on failure",
+                    "defaultValue": "1",
+                    "required": false
+                },
+                {
+                    "key": "API_TOKEN",
+                    "description": "Required API Token for secure tests",
+                    "required": true
+                }
+            ]
+        }
+    ]
+}

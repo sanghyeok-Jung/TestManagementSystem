@@ -1,0 +1,13 @@
+{
+    "name": "browser-test-sample",
+    "version": "1.0.0",
+    "description": "Browser Test Sample Project for TMS",
+    "main": "test.js",
+    "scripts": {
+        "postinstall": "npx playwright install chromium firefox webkit",
+        "test": "node test.js"
+    },
+    "dependencies": {
+        "playwright": "^1.40.0"
+    }
+}

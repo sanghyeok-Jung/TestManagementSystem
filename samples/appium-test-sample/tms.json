@@ -1,0 +1,48 @@
+{
+    "name": "appium-test-sample",
+    "description": "Sample Appium test project for Android and iOS",
+    "scripts": [
+        {
+            "name": "Launch and Close App",
+            "description": "Launches a specific application by package/bundle ID and then closes it.",
+            "command": "npm test",
+            "parameters": [
+                {
+                    "key": "APP_PACKAGE",
+                    "description": "Android Package Name (e.g., com.android.settings) or iOS Bundle ID",
+                    "required": true
+                },
+                {
+                    "key": "PLATFORM",
+                    "description": "Target OS Platform",
+                    "defaultValue": "Android",
+                    "options": [
+                        "Android",
+                        "iOS"
+                    ],
+                    "required": true
+                },
+                {
+                    "key": "AUTOMATION_NAME",
+                    "description": "Appium Automation Engine",
+                    "defaultValue": "UiAutomator2",
+                    "options": [
+                        "UiAutomator2",
+                        "XCUITest"
+                    ],
+                    "required": true
+                },
+                {
+                    "key": "ANDROID_HOME",
+                    "description": "Path to Android SDK (optional, auto-detected if empty)",
+                    "required": false
+                },
+                {
+                    "key": "JAVA_HOME",
+                    "description": "Path to JDK (optional)",
+                    "required": false
+                }
+            ]
+        }
+    ]
+}

@@ -87,8 +87,25 @@ export function ScheduleEditorDialog({ isOpen, onClose, schedule, projects, agen
     }, [selectedScripts, scriptId, projects]);
 
     const handleSave = async () => {
-        if (!name || !scriptId || !cronExpression || targets.length === 0 || !command) {
-            toast.error('Please fill in all required fields, select at least one target and choose a script to run.');
+        if (!name) {
+            toast.error('Please enter a schedule name');
+            return;
+        }
+        if (!scriptId) {
+            toast.error('Please select a project');
+            return;
+        }
+        if (!command) {
+            toast.error('Please add at least one script to the sequence');
+            return;
+        }
+        if (targets.length === 0) {
+            const msg = requiresDeviceTargets && requiresAgentTargets
+                ? 'Please select at least one agent node and one mobile device'
+                : requiresDeviceTargets
+                    ? 'Please select at least one mobile device'
+                    : 'Please select at least one agent node';
+            toast.error(msg);
             return;
         }
 
@@ -194,6 +211,26 @@ export function ScheduleEditorDialog({ isOpen, onClose, schedule, projects, agen
     };
 
     const currentProject = projects.find(p => p.id === scriptId);
+
+    // Compute required targets based on the selected scripts in the sequence
+    const requiresDeviceTargets = selectedScripts.some(instance => {
+        const type = currentProject?.metadata?.scripts?.[instance.scriptIndex]?.type || 'mobile';
+        return type === 'mobile';
+    });
+
+    const requiresAgentTargets = selectedScripts.some(instance => {
+        const type = currentProject?.metadata?.scripts?.[instance.scriptIndex]?.type || 'mobile';
+        return type === 'api' || type === 'browser';
+    });
+
+    // Cleanup invalid selected targets if requirements change
+    useEffect(() => {
+        setTargets(prev => prev.filter(t => {
+            if (t.deviceId !== null && !requiresDeviceTargets) return false;
+            if (t.deviceId === null && !requiresAgentTargets) return false;
+            return true;
+        }));
+    }, [requiresDeviceTargets, requiresAgentTargets]);
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -443,7 +480,17 @@ export function ScheduleEditorDialog({ isOpen, onClose, schedule, projects, agen
                     <div className="space-y-3 pt-4 border-t border-neutral-800">
                         <Label>Execution Targets ({targets.length} selected)</Label>
                         <div className="space-y-4">
-                            {agents.map(agent => (
+                            {(!requiresAgentTargets && !requiresDeviceTargets) && selectedScripts.length > 0 && (
+                                <p className="text-xs text-neutral-500 italic text-amber-500 py-2">
+                                    Please add a script to the sequence to select targets.
+                                </p>
+                            )}
+
+                            {selectedScripts.length === 0 && (
+                                <p className="text-xs text-neutral-500 py-2">Add a script to the sequence to select targets.</p>
+                            )}
+
+                            {selectedScripts.length > 0 && agents.map(agent => (
                                 <div key={agent.id} className="p-4 bg-neutral-800/50 border border-neutral-700 rounded-lg">
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2">
@@ -454,21 +501,25 @@ export function ScheduleEditorDialog({ isOpen, onClose, schedule, projects, agen
                                             </Badge>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
-                                        {/* Agent Environment Target */}
-                                        <div
-                                            onClick={() => toggleTarget(agent.id, null)}
-                                            className={`flex items-center gap-2 p-2 px-3 rounded-md border cursor-pointer transition-colors ${targets.some(t => t.agentId === agent.id && t.deviceId === null) ? 'bg-blue-400 border-blue-500 text-neutral-950 hover:bg-blue-500' : 'bg-neutral-900 border-neutral-700 hover:border-neutral-600 text-neutral-200'}`}
-                                        >
-                                            <ServerIcon className="w-4 h-4 shrink-0" />
-                                            <div className="flex flex-col overflow-hidden leading-tight">
-                                                <span className={`text-sm font-medium truncate ${targets.some(t => t.agentId === agent.id && t.deviceId === null) ? 'text-neutral-950' : 'text-white'}`}>Agent VM</span>
-                                                <span className={`text-[10px] truncate ${targets.some(t => t.agentId === agent.id && t.deviceId === null) ? 'text-neutral-800' : 'text-neutral-500'}`}>(No Device)</span>
+
+                                    {requiresAgentTargets && (
+                                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
+                                            {/* Agent Environment Target */}
+                                            <div
+                                                onClick={() => toggleTarget(agent.id, null)}
+                                                className={`flex items-center gap-2 p-2 px-3 rounded-md border cursor-pointer transition-colors ${targets.some(t => t.agentId === agent.id && t.deviceId === null) ? 'bg-blue-400 border-blue-500 text-neutral-950 hover:bg-blue-500' : 'bg-neutral-900 border-neutral-700 hover:border-neutral-600 text-neutral-200'}`}
+                                            >
+                                                <ServerIcon className="w-4 h-4 shrink-0" />
+                                                <div className="flex flex-col overflow-hidden leading-tight">
+                                                    <span className={`text-sm font-medium truncate ${targets.some(t => t.agentId === agent.id && t.deviceId === null) ? 'text-neutral-950' : 'text-white'}`}>Agent VM</span>
+                                                    <span className={`text-[10px] truncate ${targets.some(t => t.agentId === agent.id && t.deviceId === null) ? 'text-neutral-800' : 'text-neutral-500'}`}>(API / Browser)</span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    {agent.devices && agent.devices.length > 0 && (
-                                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-2 border-t border-neutral-700/50 pt-2">
+                                    )}
+
+                                    {requiresDeviceTargets && agent.devices && agent.devices.length > 0 && (
+                                        <div className={`grid grid-cols-2 lg:grid-cols-3 gap-2 mt-2 ${requiresAgentTargets ? 'border-t border-neutral-700/50 pt-2' : ''}`}>
                                             {agent.devices.map(device => {
                                                 const isSelected = targets.some(t => t.agentId === agent.id && t.deviceId === device.id);
                                                 return (

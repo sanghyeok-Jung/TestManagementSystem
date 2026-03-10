@@ -11,11 +11,11 @@
 
 ## ✨ Key Features
 
-- **🌐 Centralized Web Dashboard:** A highly responsive React 18 + Vite frontend built with Tailwind CSS and Radix UI to control your entire lab.
+- **🌐 Centralized Web Dashboard:** A responsive React 18 + Vite frontend built with Tailwind CSS and Radix UI to control your entire lab.
 - **📱 Real-time Device Remote Control:** Stream device screens in real-time. Full remote interaction (Tap, Swipe, Home, Back, App Switch, Screen Rotation).
-- **📦 Effortless App Installation:** Not just APKs—automatically process and install `.aab` (Android App Bundle) directly to remote devices using local `bundletool`.
-- **🖥️ Integrated Web Shell & Logcat:** Direct access to ADB Shell and real-time scrolling Logcat output for any connected remote device directly in your browser.
-- **🚀 Distributed Job Execution:** Upload test projects as `.zip` and orchestrate test/script execution across multiple agents or devices simultaneously.
+- **📦 Effortless App Installation:** Automatically process and install `.aab` (Android App Bundle) directly to remote devices using local `bundletool`.
+- **🖥️ Native Node Shell & ADB Shell:** Access high-performance interactive shells. Supports both ADB Shell for devices and **Native Node Shell (with PTY simulation)** for the host agent.
+- **🚀 Job Type Segregation:** Clearly separate **Mobile Testing** (Android/iOS) from **Node Farm Testing** (API/Browser). Run automated tasks directly on the Agent host without needing physical devices.
 - **⏰ Automated Task Scheduling:** Orchestrate periodic test executions using flexible Cron expressions. Create, manage, and monitor recurring test jobs across specific agents and devices.
 - **🔌 Agent-based Architecture:** Run lightweight Node.js agents on any macOS/Windows machine to connect physical devices instantly to the central hub.
 
@@ -97,35 +97,33 @@ This file defines the project's metadata, available test scripts, and required p
 ```json
 {
   "name": "E-Commerce E2E Tests",
-  "description": "Appium E2E test suite for the main shopping application.",
+  "description": "Appium E2E and Cypress API test suite.",
   "scripts": [
     {
-      "name": "Android Full Regression",
-      "command": "npm run test:android:regression",
-      "description": "Runs the full regression suite against an Android device.",
+      "name": "Android Regression",
+      "type": "mobile",
+      "command": "npm run test:android",
+      "description": "Runs Appium tests on a mobile device.",
       "parameters": [
-        {
-          "key": "BROWSERSTACK_USER",
-          "description": "BrowserStack Username (if using external farm)",
-          "required": false
-        },
-        {
-          "key": "ENVIRONMENT",
-          "defaultValue": "staging",
-          "options": ["staging", "production"],
-          "required": true
-        }
+        { "key": "ENV", "defaultValue": "staging", "options": ["staging", "prod"], "required": true }
       ]
     },
     {
-      "name": "iOS Smoke Test",
-      "command": "npm run test:ios:smoke",
-      "description": "Runs quick smoke tests for iOS.",
+      "name": "API Functional Test",
+      "type": "api",
+      "command": "npm run test:api",
+      "description": "Runs API tests directly on the Agent host (Node Farm).",
       "parameters": []
     }
   ]
 }
 ```
+
+### Property: `type` (Optional)
+Supported values for each script:
+- `mobile` (Default): Requires a target physical device (Android/iOS).
+- `api`: Runs directly on the Agent host VM. No device required.
+- `browser`: Similar to API, intended for Selenium/Playwright/Cypress tests.
 
 ### Uploading and Running a Project
 1. Zip your entire test project repository (ensure `node_modules` is excluded to save space).

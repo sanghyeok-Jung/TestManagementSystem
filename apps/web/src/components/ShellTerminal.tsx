@@ -72,17 +72,21 @@ export const ShellTerminal: React.FC<ShellTerminalProps> = ({ socket, agentId, d
         socket.on('shell_output', handleOutput);
         socket.on('shell_ready', handleReady);
 
+        // Generate a unique session ID for this mount to handle race conditions
+        const sessionId = Math.random().toString(36).substring(7);
+
         // Start shell session AFTER listener is ready
-        socket.emit('shell_start', { agentId, deviceId });
+        socket.emit('shell_start', { agentId, deviceId, sessionId });
 
         // Handle resize
         const handleResize = () => fitAddon.fit();
         window.addEventListener('resize', handleResize);
 
         return () => {
+            console.log(`[Terminal] Unmounting terminal for ${deviceId}, sessionId: ${sessionId}`);
             socket.off('shell_output', handleOutput);
             socket.off('shell_ready', handleReady);
-            socket.emit('shell_stop', { agentId, deviceId });
+            socket.emit('shell_stop', { agentId, deviceId, sessionId });
             term.dispose();
             window.removeEventListener('resize', handleResize);
         };

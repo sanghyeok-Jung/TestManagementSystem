@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Agent } from '@qa/types';
-import { Laptop, Smartphone, Wifi, WifiOff, Monitor, Loader2, MoreVertical, History } from 'lucide-react';
+import { Laptop, Smartphone, Wifi, WifiOff, Monitor, Loader2, MoreVertical, History, TerminalSquare } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 interface AgentCardProps {
     agent: Agent;
-    onControlDevice: (agentId: string, deviceId: string, tab?: 'control' | 'history') => void;
+    onControlDevice: (agentId: string, deviceId: string | null, tab?: 'control' | 'history') => void;
 }
 
 const AgentDeviceItem = ({ agentId, device, onControlDevice, onMenuToggle }: { agentId: string, device: any, onControlDevice: any, onMenuToggle: (isOpen: boolean) => void }) => {
@@ -192,13 +192,30 @@ export const AgentCard: React.FC<AgentCardProps> = ({ agent, onControlDevice }) 
 
             <CardContent className="px-6 pb-6">
                 <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                            Connected Devices
-                        </h4>
-                        <Badge variant="secondary" className="h-5 px-1.5 font-mono font-bold bg-slate-100 text-slate-600">
-                            {agent.devices.length}
-                        </Badge>
+                    <div className="flex flex-col gap-3 w-full">
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full justify-start gap-2 h-9 border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                                onClick={() => onControlDevice(agent.id, null, 'control')}
+                                disabled={!isOnline}
+                            >
+                                <div className="bg-slate-100 p-1 rounded-md text-slate-500 group-hover:text-blue-500 transition-colors">
+                                    <TerminalSquare size={14} />
+                                </div>
+                                <span className="font-bold text-[11px] tracking-wide">Node Environment</span>
+                            </Button>
+                        </div>
+
+                        <div className="flex items-center gap-4 mt-2">
+                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                Connected Devices
+                            </h4>
+                            <Badge variant="secondary" className="h-5 px-1.5 font-mono font-bold bg-slate-100 text-slate-600">
+                                {agent.devices.length}
+                            </Badge>
+                        </div>
                     </div>
                 </div>
 

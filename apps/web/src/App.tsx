@@ -4,6 +4,7 @@ import { Agent, Project } from '@qa/types';
 import { ProjectList } from './components/ProjectList';
 import { AgentCard } from './components/AgentCard';
 import { DeviceControlPanel } from './components/DeviceControlPanel';
+import { NodeFarmPanel } from './components/NodeFarmPanel';
 import { ScriptRunnerDialog } from './components/ScriptRunnerDialog';
 import { GlobalHistoryDialog } from './components/GlobalHistoryDialog';
 import { SchedulesDialog } from './components/SchedulesDialog';
@@ -66,6 +67,7 @@ export default function App() {
     }, []);
 
     const [selectedDevice, setSelectedDevice] = useState<{ agentId: string, deviceId: string, initialTab?: 'control' | 'history' } | null>(null);
+    const [selectedAgent, setSelectedAgent] = useState<{ agentId: string, initialTab?: 'control' | 'history' } | null>(null);
     const [scriptRunnerOpen, setScriptRunnerOpen] = useState(false);
     const [globalHistoryOpen, setGlobalHistoryOpen] = useState(false);
     const [schedulesOpen, setSchedulesOpen] = useState(false);
@@ -74,8 +76,12 @@ export default function App() {
     // Project Management State
     const [refreshProjectsTrigger, setRefreshProjectsTrigger] = useState(0);
 
-    const handleControlDevice = (agentId: string, deviceId: string, tab?: 'control' | 'history') => {
-        setSelectedDevice({ agentId, deviceId, initialTab: tab });
+    const handleControlDevice = (agentId: string, deviceId: string | null, tab?: 'control' | 'history') => {
+        if (deviceId) {
+            setSelectedDevice({ agentId, deviceId, initialTab: tab });
+        } else {
+            setSelectedAgent({ agentId, initialTab: tab });
+        }
     };
 
     const handleRunProject = (project: Project) => {
@@ -227,6 +233,15 @@ export default function App() {
                     deviceId={selectedDevice.deviceId}
                     initialTab={selectedDevice.initialTab}
                     onClose={() => setSelectedDevice(null)}
+                />
+            )}
+
+            {selectedAgent && (
+                <NodeFarmPanel
+                    socket={socket}
+                    agent={agents.find(a => a.id === selectedAgent.agentId)!}
+                    initialTab={selectedAgent.initialTab}
+                    onClose={() => setSelectedAgent(null)}
                 />
             )}
             <Toaster position="bottom-right" theme="light" expand={true} richColors />

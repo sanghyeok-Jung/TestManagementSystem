@@ -4,6 +4,7 @@
     "scripts": [
         {
             "name": "Launch and Close App",
+            "type": "mobile",
             "description": "Launches a specific application by package/bundle ID and then closes it.",
             "command": "npm test",
             "parameters": [

@@ -48,6 +48,7 @@ export interface ProjectScript {
   name: string;
   command: string;
   description?: string;
+  type?: 'mobile' | 'api' | 'browser';
   parameters?: ProjectParameter[];
 }
 

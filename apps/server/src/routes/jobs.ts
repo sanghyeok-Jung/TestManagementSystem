@@ -68,7 +68,19 @@ export default async function jobRoutes(fastify: FastifyInstance, options: { job
     });
 
     fastify.get('/api/jobs', async (req, reply) => {
-        return jobManager.getAll();
+        const query = req.query as { agentId?: string, deviceId?: string };
+        let allJobs = jobManager.getAll();
+
+        if (query.agentId) {
+            allJobs = allJobs.filter(j => j.targetAgentId === query.agentId);
+        }
+
+        if (query.deviceId !== undefined) {
+            const deviceIdToMatch = query.deviceId === 'null' ? null : query.deviceId;
+            allJobs = allJobs.filter(j => j.targetDeviceId === deviceIdToMatch || j.targetDeviceId === undefined);
+        }
+
+        return allJobs;
     });
 
     fastify.get('/api/jobs/:jobId/logs', async (req, reply) => {

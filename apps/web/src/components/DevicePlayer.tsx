@@ -24,6 +24,8 @@ export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, s
         });
     };
 
+    const canInteract = !_readonly && (!isBuffering || videoDimensions.vw > 0);
+
     return (
         <div className="w-full h-full relative select-none bg-black">
 
@@ -57,9 +59,15 @@ export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, s
             {isBuffering && previewImage && (
                 <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-2 py-1.5 bg-black/60 backdrop-blur-sm pointer-events-none">
                     <Loader2 className="w-3 h-3 text-blue-400 animate-spin flex-none" />
-                    <span className="text-[10px] font-semibold tracking-widest uppercase text-blue-300 animate-pulse">
-                        Reconnecting — Touch disabled
-                    </span>
+                    {canInteract ? (
+                        <span className="text-[10px] font-semibold tracking-widest uppercase text-emerald-400 animate-pulse">
+                            Ready — Touch screen to start live view
+                        </span>
+                    ) : (
+                        <span className="text-[10px] font-semibold tracking-widest uppercase text-blue-300 animate-pulse">
+                            Reconnecting — Touch disabled
+                        </span>
+                    )}
                 </div>
             )}
 
@@ -78,13 +86,12 @@ export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, s
                 playsInline
                 className={cn(
                     "w-full h-full object-contain transition-opacity duration-500",
-                    isBuffering
-                        ? "opacity-0 pointer-events-none cursor-default"
-                        : "opacity-100 cursor-crosshair"
+                    isBuffering ? "opacity-0" : "opacity-100",
+                    canInteract ? "cursor-crosshair pointer-events-auto" : "cursor-default pointer-events-none"
                 )}
-                onMouseDown={(e) => handleInteraction(e, 'down')}
-                onMouseUp={(e) => handleInteraction(e, 'up')}
-                onMouseLeave={resetInteraction}
+                onMouseDown={canInteract ? (e) => handleInteraction(e, 'down') : undefined}
+                onMouseUp={canInteract ? (e) => handleInteraction(e, 'up') : undefined}
+                onMouseLeave={canInteract ? resetInteraction : undefined}
             />
         </div>
     );

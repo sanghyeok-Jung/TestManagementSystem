@@ -201,8 +201,15 @@ export function setupSocketHandlers(io: Server, agents: Map<string, Agent>, devi
         socket.on('adb_install', (data) => forwardToAgent('adb_install', data));
 
         // Agent -> Frontend
-        socket.on('shell_ready', (data) => forwardToFrontend('shell_ready', data));
-        socket.on('shell_output', (data) => forwardToFrontend('shell_output', data));
+        socket.on('shell_ready', (data) => {
+            console.log(`[Server] shell_ready from agent ${data.agentId} for ${data.deviceId}`);
+            forwardToFrontend('shell_ready', data);
+        });
+        socket.on('shell_output', (data) => {
+            // Log only a snippet of output to avoid spam
+            console.log(`[Server] shell_output from agent ${data.agentId} for ${data.deviceId}: "${data.output.substring(0, 20)}..."`);
+            forwardToFrontend('shell_output', data);
+        });
         socket.on('logcat_data', (data) => forwardToFrontend('logcat_data', data));
         socket.on('adb_push_status', (data) => forwardToFrontend('adb_push_status', data));
         socket.on('adb_pull_complete', (data) => forwardToFrontend('adb_pull_complete', data));

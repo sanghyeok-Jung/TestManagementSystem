@@ -6,7 +6,6 @@ const TARGET_URL = process.env.TARGET_URL || 'https://www.google.com';
 const BROWSER_TYPE = process.env.BROWSER || 'chromium';
 const TEST_ENV = process.env.TEST_ENV || 'staging';
 const RETRY_COUNT = parseInt(process.env.RETRY_COUNT || '0');
-const API_TOKEN = process.env.API_TOKEN;
 
 async function runTest() {
     console.log(`===============================================`);
@@ -15,15 +14,7 @@ async function runTest() {
     console.log(`🌐 Browser: ${BROWSER_TYPE}`);
     console.log(`🏗️  Env: ${TEST_ENV}`);
     console.log(`🔄 Retries: ${RETRY_COUNT}`);
-    console.log(`🔑 API Token: ${API_TOKEN ? '********' : 'NONE'}`);
     console.log(`===============================================`);
-
-    // Basic validation for required parameters in the script logic 
-    // (Though TMS frontend will also enforce 'required' before job creation)
-    if (!API_TOKEN) {
-        console.error('❌ Error: API_TOKEN is required but not provided.');
-        process.exit(1);
-    }
 
     const browser = await playwright[BROWSER_TYPE].launch({
         headless: true,

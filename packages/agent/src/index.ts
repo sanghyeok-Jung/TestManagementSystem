@@ -115,7 +115,7 @@ socket.on('start_job', async (data: any) => {
             agentInfo.devices = agentInfo.devices.map(d =>
                 d.id === deviceId ? { ...d, jobStatus: 'running' } : d
             );
-            socket.emit('device_update', { agentId: agentInfo.id, devices: agentInfo.devices });
+            socket.emit('device_update', { agentId: agentInfo.id, devices: agentInfo.devices, agentQueueLength: agentInfo.queueLength });
         } else {
             // Agent-level job
             agentRunningJobs.add(jobId);
@@ -129,7 +129,7 @@ socket.on('start_job', async (data: any) => {
                 agentInfo.devices = agentInfo.devices.map(d =>
                     d.id === deviceId ? { ...d, jobStatus: 'idle' } : d
                 );
-                socket.emit('device_update', { agentId: agentInfo.id, devices: agentInfo.devices });
+                socket.emit('device_update', { agentId: agentInfo.id, devices: agentInfo.devices, agentQueueLength: agentInfo.queueLength });
             } else {
                 agentRunningJobs.delete(jobId);
             }

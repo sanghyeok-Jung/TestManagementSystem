@@ -102,8 +102,21 @@ export const ScriptRunnerDialog: React.FC<ScriptRunnerDialogProps> = ({ isOpen, 
     }, [selectedScripts, scriptId, projects]);
 
     const handleRun = async () => {
-        if (!scriptId || selectedTargets.length === 0 || !command) {
-            toast.error('Please specify a script, command, and at least one target');
+        if (!scriptId) {
+            toast.error('Please specify a script ID');
+            return;
+        }
+        if (!command) {
+            toast.error('Please add at least one script to the sequence');
+            return;
+        }
+        if (selectedTargets.length === 0) {
+            const msg = requiresDeviceTargets && requiresAgentTargets
+                ? 'Please select at least one agent node and one mobile device'
+                : requiresDeviceTargets
+                    ? 'Please select at least one mobile device'
+                    : 'Please select at least one agent node';
+            toast.error(msg);
             return;
         }
 
@@ -217,6 +230,26 @@ export const ScriptRunnerDialog: React.FC<ScriptRunnerDialogProps> = ({ isOpen, 
 
     const currentProject = projects.find(p => p.id === scriptId);
 
+    // Compute required targets based on the selected scripts in the sequence
+    const requiresDeviceTargets = selectedScripts.some(instance => {
+        const type = currentProject?.metadata?.scripts?.[instance.scriptIndex]?.type || 'mobile';
+        return type === 'mobile';
+    });
+
+    const requiresAgentTargets = selectedScripts.some(instance => {
+        const type = currentProject?.metadata?.scripts?.[instance.scriptIndex]?.type || 'mobile';
+        return type === 'api' || type === 'browser';
+    });
+
+    // Cleanup invalid selected targets if requirements change
+    useEffect(() => {
+        setSelectedTargets(prev => prev.filter(t => {
+            if (t.deviceId !== null && !requiresDeviceTargets) return false;
+            if (t.deviceId === null && !requiresAgentTargets) return false;
+            return true;
+        }));
+    }, [requiresDeviceTargets, requiresAgentTargets]);
+
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto w-[95vw] p-4 sm:p-6">
@@ -249,13 +282,16 @@ export const ScriptRunnerDialog: React.FC<ScriptRunnerDialogProps> = ({ isOpen, 
                                 size="sm"
                                 className="h-auto p-0 text-xs"
                                 onClick={() => {
-                                    // Select all devices AND all agents (Agent Environment)
                                     const allTargets: { agentId: string, deviceId: string | null }[] = [];
                                     agents.filter(a => a.status === 'online').forEach(a => {
-                                        allTargets.push({ agentId: a.id, deviceId: null });
-                                        a.devices.forEach(d => {
-                                            allTargets.push({ agentId: a.id, deviceId: d.id });
-                                        });
+                                        if (requiresAgentTargets) {
+                                            allTargets.push({ agentId: a.id, deviceId: null });
+                                        }
+                                        if (requiresDeviceTargets) {
+                                            a.devices.forEach(d => {
+                                                allTargets.push({ agentId: a.id, deviceId: d.id });
+                                            });
+                                        }
                                     });
                                     setSelectedTargets(allTargets.length === selectedTargets.length ? [] : allTargets);
                                 }}
@@ -267,7 +303,26 @@ export const ScriptRunnerDialog: React.FC<ScriptRunnerDialogProps> = ({ isOpen, 
                             {agents.filter(a => a.status === 'online').length === 0 && (
                                 <p className="text-xs text-slate-500 text-center py-2">No online agents available.</p>
                             )}
-                            {agents.filter(a => a.status === 'online').map(agent => {
+
+                            {(!requiresAgentTargets && !requiresDeviceTargets) && selectedScripts.length > 0 && (
+                                <p className="text-xs text-slate-500 text-center py-2 italic text-amber-600">
+                                    Please add a script to the sequence to select targets.
+                                </p>
+                            )}
+
+                            {selectedScripts.length === 0 && (
+                                <div className="text-xs text-slate-500 text-center py-4 flex flex-col items-center gap-2">
+                                    <Info className="w-4 h-4 text-blue-400" />
+                                    <span>Add a script to the sequence below to enable target selection.</span>
+                                </div>
+                            )}
+                            {selectedScripts.length > 0 && requiresDeviceTargets && !agents.some(a => a.status === 'online' && a.devices.length > 0) && (
+                                <p className="text-xs text-amber-600 text-center py-2">No online agents with mobile devices available.</p>
+                            )}
+                            {selectedScripts.length > 0 && requiresAgentTargets && !agents.some(a => a.status === 'online') && (
+                                <p className="text-xs text-amber-600 text-center py-2">No online agents available for API/Browser tests.</p>
+                            )}
+                            {selectedScripts.length > 0 && agents.filter(a => a.status === 'online').map(agent => {
                                 // Agent-level checkbox (device-less)
                                 const isAgentSelected = selectedTargets.some(t => t.agentId === agent.id && t.deviceId === null);
 
@@ -278,24 +333,26 @@ export const ScriptRunnerDialog: React.FC<ScriptRunnerDialogProps> = ({ isOpen, 
                                         </div>
 
                                         {/* Agent Environment Target */}
-                                        <div
-                                            className={`flex items-center gap-2 p-2 rounded-md cursor-pointer border text-sm transition-colors ${isAgentSelected ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100 hover:border-slate-300'}`}
-                                            onClick={() => toggleTarget(agent.id, null)}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={isAgentSelected}
-                                                readOnly
-                                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 pointer-events-none"
-                                            />
-                                            <div className="flex-1 font-medium text-slate-700 flex items-center gap-2">
-                                                <span className="text-purple-600 font-bold text-[10px] bg-purple-50 px-1 py-0.5 rounded border border-purple-100">Agent VM</span>
-                                                Agent Environment (No Device)
+                                        {requiresAgentTargets && (
+                                            <div
+                                                className={`flex items-center gap-2 p-2 rounded-md cursor-pointer border text-sm transition-colors ${isAgentSelected ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100 hover:border-slate-300'}`}
+                                                onClick={() => toggleTarget(agent.id, null)}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isAgentSelected}
+                                                    readOnly
+                                                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 pointer-events-none"
+                                                />
+                                                <div className="flex-1 font-medium text-slate-700 flex items-center gap-2">
+                                                    <span className="text-purple-600 font-bold text-[10px] bg-purple-50 px-1 py-0.5 rounded border border-purple-100">Agent VM</span>
+                                                    Agent Environment (API / Browser)
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
 
                                         {/* Connected Devices */}
-                                        {agent.devices.map(device => {
+                                        {requiresDeviceTargets && agent.devices.map(device => {
                                             const isSelected = selectedTargets.some(t => t.agentId === agent.id && t.deviceId === device.id);
                                             return (
                                                 <div

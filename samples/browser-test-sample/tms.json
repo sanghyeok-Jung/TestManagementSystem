@@ -4,6 +4,7 @@
     "scripts": [
         {
             "name": "Verify Web Page Title",
+            "type": "browser",
             "description": "Opens a URL and verifies the page title with extended options.",
             "command": "npm test",
             "parameters": [
@@ -40,11 +41,6 @@
                     "description": "Number of times to retry on failure",
                     "defaultValue": "1",
                     "required": false
-                },
-                {
-                    "key": "API_TOKEN",
-                    "description": "Required API Token for secure tests",
-                    "required": true
                 }
             ]
         }

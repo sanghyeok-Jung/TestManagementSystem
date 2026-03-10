@@ -4,6 +4,7 @@
     "scripts": [
         {
             "name": "Verify API endpoint operation",
+            "type": "api",
             "description": "Tests normal operation of REST API endpoints such as addresses and posts.",
             "command": "npm test",
             "parameters": [

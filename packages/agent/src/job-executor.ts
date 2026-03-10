@@ -82,7 +82,7 @@ export class JobExecutor {
             // 5. Execute
             console.log(`Executing: ${command}`);
             const [cmd, ...args] = command.split(' ');
-            const subprocess = execa(cmd, args, { cwd: workingDir, env: execEnv });
+            const subprocess = execa(cmd, args, { cwd: workingDir, env: execEnv, shell: true });
 
             this.activeJobs.set(jobId, subprocess);
 

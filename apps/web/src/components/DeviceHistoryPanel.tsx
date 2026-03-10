@@ -9,10 +9,11 @@ import axios from 'axios';
 
 interface DeviceHistoryPanelProps {
     socket: any;
-    deviceId: string;
+    deviceId: string | null;
+    agentIdOverride?: string;
 }
 
-export const DeviceHistoryPanel: React.FC<DeviceHistoryPanelProps> = ({ socket, deviceId }) => {
+export const DeviceHistoryPanel: React.FC<DeviceHistoryPanelProps> = ({ socket, deviceId, agentIdOverride }) => {
     const [jobs, setJobs] = useState<TestJob[]>([]);
     const [selectedJob, setSelectedJob] = useState<TestJob | null>(null);
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -23,7 +24,14 @@ export const DeviceHistoryPanel: React.FC<DeviceHistoryPanelProps> = ({ socket, 
     // Fetch Jobs
     const fetchJobs = async () => {
         try {
-            const res = await axios.get<TestJob[]>(`/api/devices/${deviceId}/jobs`);
+            let url = `/api/devices/${deviceId}/jobs`;
+            if (deviceId === null && agentIdOverride) {
+                // Fetch jobs specifically for this agent where deviceId is null
+                // We will need to create a server route or use query params on jobs API
+                url = `/api/jobs?agentId=${agentIdOverride}&deviceId=null`;
+            }
+
+            const res = await axios.get<TestJob[]>(url);
             const jobsData = res.data;
             setJobs(jobsData);
             // Auto-select latest if none selected
@@ -43,13 +51,20 @@ export const DeviceHistoryPanel: React.FC<DeviceHistoryPanelProps> = ({ socket, 
         fetchJobs();
 
         const onJobUpdated = (job: TestJob) => {
-            if (job.targetDeviceId === deviceId) {
+            if (deviceId === null && agentIdOverride) {
+                if (job.targetAgentId === agentIdOverride && !job.targetDeviceId) fetchJobs();
+            } else if (job.targetDeviceId === deviceId) {
                 fetchJobs();
             }
         };
 
         const onJobCreated = (job: TestJob) => {
-            if (job.targetDeviceId === deviceId) {
+            if (deviceId === null && agentIdOverride) {
+                if (job.targetAgentId === agentIdOverride && !job.targetDeviceId) {
+                    fetchJobs();
+                    setSelectedJob(job);
+                }
+            } else if (job.targetDeviceId === deviceId) {
                 fetchJobs();
                 // Auto-switch to new job
                 setSelectedJob(job);
@@ -64,7 +79,7 @@ export const DeviceHistoryPanel: React.FC<DeviceHistoryPanelProps> = ({ socket, 
             socket.off('job_updated', onJobUpdated);
             socket.off('job_created', onJobCreated);
         };
-    }, [deviceId, socket]);
+    }, [deviceId, agentIdOverride, socket]);
 
     // Fetch Logs when selected job changes
     useEffect(() => {
@@ -144,7 +159,7 @@ export const DeviceHistoryPanel: React.FC<DeviceHistoryPanelProps> = ({ socket, 
                     <ScrollArea className="h-full">
                         {jobs.length === 0 ? (
                             <div className="p-8 text-center text-slate-500">
-                                <p className="text-sm font-medium">No jobs found for this device.</p>
+                                <p className="text-sm font-medium">No jobs found for this target.</p>
                             </div>
                         ) : (
                             <div className="p-2 space-y-1">

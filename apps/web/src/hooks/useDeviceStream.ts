@@ -6,9 +6,10 @@ interface UseDeviceStreamProps {
     agentId: string;
     deviceId: string;
     socket: Socket;
+    platform: 'android' | 'ios';
 }
 
-export const useDeviceStream = ({ agentId, deviceId, socket }: UseDeviceStreamProps) => {
+export const useDeviceStream = ({ agentId, deviceId, socket, platform }: UseDeviceStreamProps) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isBuffering, setIsBuffering] = useState(true);
     const [fps, setFps] = useState(0);
@@ -76,10 +77,13 @@ export const useDeviceStream = ({ agentId, deviceId, socket }: UseDeviceStreamPr
                 // For iOS (screenshot-based streaming) the preview IS the stream.
                 // After the first preview frame arrives, mark as "not buffering"
                 // so that the UI shows the image and enables interaction.
-                if (!hasReceivedFrame.current) {
-                    hasReceivedFrame.current = true;
+                // For Android, we keep buffering until the H.264 video actually fires 'playing'.
+                if (platform === 'ios') {
+                    if (!hasReceivedFrame.current) {
+                        hasReceivedFrame.current = true;
+                    }
+                    setIsBuffering(false);
                 }
-                setIsBuffering(false);
             }
         };
 

@@ -9,11 +9,12 @@ interface DevicePlayerProps {
     agentId: string;
     deviceId: string;
     socket: Socket;
+    platform: 'android' | 'ios';
     readonly?: boolean;
 }
 
-export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, socket, readonly: _readonly = false }) => {
-    const { videoRef, isBuffering, previewImage, fps, videoDimensions } = useDeviceStream({ agentId, deviceId, socket });
+export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, socket, platform, readonly: _readonly = false }) => {
+    const { videoRef, isBuffering, previewImage, fps, videoDimensions } = useDeviceStream({ agentId, deviceId, socket, platform });
     const { handleInteraction, resetInteraction } = useDeviceInteraction({ agentId, deviceId, socket, videoDimensions });
 
     const handleWake = () => {
@@ -25,9 +26,10 @@ export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, s
     };
 
     // iOS screenshot-based streaming: previewImage keeps updating = live stream
-    const isPreviewBasedStream = !isBuffering && previewImage && videoDimensions.vw === 0;
+    // We do not require !isBuffering here because if it briefly buffers, the old image is still visible and should be tap-able.
+    const isPreviewBasedStream = platform === 'ios' && !!previewImage && videoDimensions.vw === 0;
 
-    const canInteract = !_readonly && (!isBuffering || videoDimensions.vw > 0 || !!isPreviewBasedStream);
+    const canInteract = !_readonly;
 
     return (
         <div className="w-full h-full relative select-none bg-black">
@@ -74,22 +76,6 @@ export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, s
                 </div>
             )}
 
-            {/* Reconnecting banner — shown on top of preview when stream is resetting */}
-            {isBuffering && previewImage && (
-                <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-2 py-1.5 bg-black/60 backdrop-blur-sm pointer-events-none">
-                    <Loader2 className="w-3 h-3 text-blue-400 animate-spin flex-none" />
-                    {canInteract ? (
-                        <span className="text-[10px] font-semibold tracking-widest uppercase text-emerald-400 animate-pulse">
-                            Ready — Touch screen to start live view
-                        </span>
-                    ) : (
-                        <span className="text-[10px] font-semibold tracking-widest uppercase text-blue-300 animate-pulse">
-                            Reconnecting — Touch disabled
-                        </span>
-                    )}
-                </div>
-            )}
-
             {/* FPS + Dimensions (debug) */}
             {!isBuffering && (
                 <div className="absolute top-2 right-2 z-20 px-2 py-1 bg-black/50 text-green-400 text-[10px] font-mono rounded pointer-events-none">
@@ -105,7 +91,7 @@ export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, s
                 playsInline
                 className={cn(
                     "w-full h-full object-contain transition-opacity duration-500",
-                    (isBuffering || isPreviewBasedStream) ? "opacity-0" : "opacity-100",
+                    isPreviewBasedStream ? "opacity-0" : "opacity-100",
                     (!isPreviewBasedStream && canInteract) ? "cursor-crosshair pointer-events-auto" : "cursor-default pointer-events-none"
                 )}
                 onMouseDown={(!isPreviewBasedStream && canInteract) ? (e) => handleInteraction(e, 'down') : undefined}

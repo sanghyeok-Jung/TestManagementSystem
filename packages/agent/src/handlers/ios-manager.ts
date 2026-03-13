@@ -18,6 +18,7 @@ export class IosDeviceManager implements IDeviceManager {
     private wdaSessionIds = new Map<string, string>();
     private mjpegPorts = new Map<string, number>();
     private mjpegProxyProcesses = new Map<string, execa.ExecaChildProcess>();
+    private xcodeProcesses = new Map<string, execa.ExecaChildProcess>();
 
     constructor(agentId: string) {
         this.agentId = agentId;
@@ -58,80 +59,89 @@ export class IosDeviceManager implements IDeviceManager {
     }
 
     private async ensureWdaSession(deviceId: string): Promise<number> {
+        let freePort: number;
+
+        // If we already have port forwarding setup, just verify it's still responding
         if (this.wdaPorts.has(deviceId)) {
-            return this.wdaPorts.get(deviceId)!;
-        }
+            freePort = this.wdaPorts.get(deviceId)!;
+             // We do not return immediately. We will check it later.
+        } else {
+            console.log(`[IosManager] Setting up WDA port forwarding for ${deviceId}`);
+            freePort = await getPort();
+            
+            // Start iproxy to forward freePort -> 8100 on the device
+            // We ignore stdio to prevent "Error connecting to device: Connection refused" spam before WDA is ready
+            const proxyProcess = execa('iproxy', ['-u', deviceId, `${freePort}:8100`], { stdio: 'ignore' });
+            
+            proxyProcess.catch((err) => {
+                console.error(`[IosManager] iproxy process for ${deviceId} exited:`, err.message);
+                this.wdaPorts.delete(deviceId);
+                this.proxyProcesses.delete(deviceId);
+                this.wdaSessionIds.delete(deviceId);
 
-        console.log(`[IosManager] Setting up WDA port forwarding for ${deviceId}`);
-        const freePort = await getPort();
-        
-        // Start iproxy to forward freePort -> 8100 on the device
-        const proxyProcess = execa('iproxy', ['-u', deviceId, `${freePort}:8100`]);
-        
-        proxyProcess.catch((err) => {
-            console.error(`[IosManager] iproxy process for ${deviceId} exited:`, err.message);
-            this.wdaPorts.delete(deviceId);
-            this.proxyProcesses.delete(deviceId);
-        });
+                const tunnelProc = this.tunnelProcesses.get(deviceId);
+                if (tunnelProc) {
+                    tunnelProc.kill();
+                    this.tunnelProcesses.delete(deviceId);
+                }
 
-        this.wdaPorts.set(deviceId, freePort);
-        this.proxyProcesses.set(deviceId, proxyProcess);
+                const xcodeProc = this.xcodeProcesses.get(deviceId);
+                if (xcodeProc) {
+                    xcodeProc.kill();
+                    this.xcodeProcesses.delete(deviceId);
+                }
+            });
 
-        // For iOS 17+, we might need a tunnel
-        let osVer = this.metadataCache.get(deviceId)?.osVersion;
-        if (!osVer) {
-            try {
-                const { stdout } = await execa('ideviceinfo', ['-u', deviceId, '-k', 'ProductVersion'], { timeout: 2000 });
-                osVer = stdout.trim();
-            } catch (e) {
-                osVer = '0';
+            this.wdaPorts.set(deviceId, freePort);
+            this.proxyProcesses.set(deviceId, proxyProcess);
+
+            // For iOS 17+, we might need a tunnel
+            let osVer = this.metadataCache.get(deviceId)?.osVersion;
+            if (!osVer) {
+                try {
+                    const { stdout } = await execa('ideviceinfo', ['-u', deviceId, '-k', 'ProductVersion'], { timeout: 2000 });
+                    osVer = stdout.trim();
+                } catch (e) {
+                    osVer = '0';
+                }
+            }
+            const majorVersion = parseInt(osVer.split('.')[0]);
+            
+            if (majorVersion >= 17 || majorVersion > 20) { // Handling 26.3.1 build string as well
+                console.log(`[IosManager] Starting go-ios tunnel for ${deviceId} (iOS ${osVer})`);
+                const iosBin = await this.getIosBinary();
+                const tunnelProcess = execa(iosBin, ['tunnel', 'start', '--udid=' + deviceId, '--userspace'], {
+                    env: { ...process.env, ENABLE_GO_IOS_AGENT: 'user' }
+                });
+                tunnelProcess.catch(e => console.warn(`[IosManager] Tunnel for ${deviceId} failed/exited:`, e.message));
+                this.tunnelProcesses.set(deviceId, tunnelProcess);
+                // Wait a bit more for tunnel
+                await new Promise(r => setTimeout(r, 2000));
             }
         }
-        const majorVersion = parseInt(osVer.split('.')[0]);
-        
-        if (majorVersion >= 17 || majorVersion > 20) { // Handling 26.3.1 build string as well
-            console.log(`[IosManager] Starting go-ios tunnel for ${deviceId} (iOS ${osVer})`);
-            const iosBin = await this.getIosBinary();
-            const tunnelProcess = execa(iosBin, ['tunnel', 'start', '--udid=' + deviceId, '--userspace'], {
-                env: { ...process.env, ENABLE_GO_IOS_AGENT: 'user' }
-            });
-            tunnelProcess.catch(e => console.warn(`[IosManager] Tunnel for ${deviceId} failed/exited:`, e.message));
-            this.tunnelProcesses.set(deviceId, tunnelProcess);
-            // Wait a bit more for tunnel
-            await new Promise(r => setTimeout(r, 2000));
-        }
 
-        // Wait a bit for proxy to establish and try to connect (with retries)
-        let ready = false;
-        for (let i = 0; i < 5; i++) {
-            await new Promise(r => setTimeout(r, 1000));
+        // Helper to check WDA readiness and bind session
+        const checkWda = async (portToCheck: number): Promise<boolean> => {
             try {
-                const statusUrl = `http://127.0.0.1:${freePort}/status`;
+                const statusUrl = `http://127.0.0.1:${portToCheck}/status`;
                 const res = await axios.get(statusUrl, { timeout: 2000 });
                 const statusData = res.data as any;
                 
                 if (statusData?.value?.ready || statusData?.value?.state === 'success' || (statusData?.status === 0 && statusData?.value)) {
-                    console.log(`[IosManager] WDA is ready on port ${freePort} for ${deviceId}`);
+                    console.log(`[IosManager] WDA is ready on port ${portToCheck} for ${deviceId}`);
                     
-                    // 1. Try to get sessionId from status directly
                     let sessionId = statusData?.sessionId || statusData?.value?.sessionId;
-                    
-                    // 2. If not in status, try /sessions
                     if (!sessionId) {
                         try {
-                            const sessRes = await axios.get(`http://127.0.0.1:${freePort}/sessions`, { timeout: 2000 });
+                            const sessRes = await axios.get(`http://127.0.0.1:${portToCheck}/sessions`, { timeout: 2000 });
                             const sessions = (sessRes.data as any)?.value || [];
-                            if (sessions.length > 0) {
-                                sessionId = sessions[0].id;
-                            }
+                            if (sessions.length > 0) sessionId = sessions[0].id;
                         } catch (e) {}
                     }
-                    
-                    // 3. If still not found, try to create one
                     if (!sessionId) {
                         try {
-                            const createRes = await axios.post(`http://127.0.0.1:${freePort}/session`, {
-                                capabilities: { alwaysMatch: { bundleId: 'com.apple.mobilesafari' } }
+                            const createRes = await axios.post(`http://127.0.0.1:${portToCheck}/session`, {
+                                capabilities: { alwaysMatch: { bundleId: 'com.apple.springboard' } }
                             }, { timeout: 5000 });
                             sessionId = (createRes.data as any)?.sessionId || (createRes.data as any)?.value?.sessionId;
                         } catch (e: any) {
@@ -145,17 +155,63 @@ export class IosDeviceManager implements IDeviceManager {
                     } else {
                         console.warn(`[IosManager] Could not determine WDA session ID for ${deviceId}. Some commands may fail.`);
                     }
-
-                    ready = true;
-                    break;
+                    return true;
                 }
             } catch (e: any) {
-                console.log(`[IosManager] WDA not ready yet on port ${freePort} (attempt ${i+1}): ${e.message}`);
+                // Silently ignore connection errors while waiting
+            }
+            return false;
+        };
+
+        // 1. Check if WDA is already running (wait up to 3s)
+        let ready = false;
+        for (let i = 0; i < 3; i++) {
+            ready = await checkWda(freePort);
+            if (ready) return freePort; // If active, we are good to go!
+            await new Promise(r => setTimeout(r, 1000));
+        }
+
+        // 2. If not ready, auto-launch via xcodebuild (only if we haven't already launched it)
+        if (!ready && !this.xcodeProcesses.has(deviceId)) {
+            console.log(`[IosManager] WDA not responding on port ${freePort}. Attempting to launch WDA via xcodebuild...`);
+            const wdaProject = process.env.WDA_PROJECT_PATH || '/Users/sh/Downloads/WebDriverAgent-11.4.0/WebDriverAgent.xcodeproj';
+            
+            if (fs.existsSync(wdaProject)) {
+                // Do not ignore stdio here, we want to see build errors if xcodebuild fails
+                const xcodeProc = execa('xcodebuild', [
+                    '-project', wdaProject,
+                    '-scheme', 'WebDriverAgentRunner',
+                    '-destination', `id=${deviceId}`,
+                    'test'
+                ]);
+                xcodeProc.stdout?.pipe(process.stdout);
+                xcodeProc.stderr?.pipe(process.stderr);
+                
+                xcodeProc.catch(e => {
+                    console.error(`[IosManager] xcodebuild process exited for ${deviceId}:`, e.message);
+                    this.xcodeProcesses.delete(deviceId);
+                });
+                this.xcodeProcesses.set(deviceId, xcodeProc);
+
+                // Wait up to 60s for xcodebuild to build and launch WDA (initial build can be slow)
+                console.log(`[IosManager] Waiting up to 60s for WDA to start on device...`);
+                for (let i = 0; i < 60; i++) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    // Check wda without flooding logs
+                    ready = await checkWda(freePort);
+                    if (ready) {
+                        console.log(`[IosManager] Successfully auto-launched WDA for ${deviceId}`);
+                        return freePort;
+                    }
+                }
+            } else {
+                console.warn(`[IosManager] Auto-launch skipped: WDA project not found at ${wdaProject}. Please set WDA_PROJECT_PATH env var.`);
             }
         }
 
         if (!ready) {
-            console.error(`[IosManager] Failed to connect to WDA on port ${freePort} for ${deviceId} after 5s.`);
+            console.error(`[IosManager] Failed to connect to WDA on port ${freePort} for ${deviceId} after auto-launch attempt.`);
+            throw new Error(`WDA is not responding on port ${freePort} for ${deviceId}`);
         }
 
         return freePort;
@@ -398,7 +454,7 @@ export class IosDeviceManager implements IDeviceManager {
         const mjpegLocalPort = await getPort();
         console.log(`[IosManager] Starting MJPEG iproxy for ${deviceId}: local ${mjpegLocalPort} → device 9100`);
 
-        const mjpegProxy = execa('iproxy', ['-u', deviceId, `${mjpegLocalPort}:9100`]);
+        const mjpegProxy = execa('iproxy', ['-u', deviceId, `${mjpegLocalPort}:9100`], { stdio: 'ignore' });
         mjpegProxy.catch((err) => {
             console.warn(`[IosManager] MJPEG iproxy for ${deviceId} exited:`, err.message);
             this.mjpegPorts.delete(deviceId);

@@ -57,8 +57,12 @@ class StreamSession {
         // Initial preview
         this.sendPreview();
 
+        let retryCount = 0;
+        let lastStartTime = 0;
+
         // Main loop
         while (this.active) {
+            lastStartTime = Date.now();
             try {
                 const streamSize = await this.calculateStreamSize();
                 console.log(`[StreamSession] Determined size: ${streamSize} (Rot: ${this.currentRotation})`);
@@ -69,8 +73,28 @@ class StreamSession {
 
             if (!this.active) break;
 
-            console.log(`[StreamSession] Restarting stream for ${this.deviceId} in 300ms...`);
-            await new Promise(r => setTimeout(r, 300));
+            const uptime = Date.now() - lastStartTime;
+            if (uptime > 5000) {
+                // If it stayed alive for > 5s, it was likely a successful connection that later dropped
+                retryCount = 0;
+            } else {
+                retryCount++;
+            }
+
+            if (retryCount > 15) {
+                console.error(`[StreamSession] Maximum restart retries reached for ${this.deviceId}. Halting stream.`);
+                this.socket.emit('stream_error', { deviceId: this.deviceId, message: 'Stream failed to connect after multiple retries.' });
+                break;
+            }
+
+            const backoffDelay = Math.min(500 * Math.pow(1.5, retryCount - 1), 5000);
+            if (retryCount > 0) {
+                 console.log(`[StreamSession] Stream died quickly. Restarting for ${this.deviceId} in ${Math.round(backoffDelay)}ms (Attempt ${retryCount}/15)...`);
+            } else {
+                 console.log(`[StreamSession] Restarting stream for ${this.deviceId} in 300ms...`);
+            }
+            
+            await new Promise(r => setTimeout(r, retryCount > 0 ? backoffDelay : 300));
 
             // Re-wake before restart
             if (this.platform === 'android') {
@@ -79,7 +103,7 @@ class StreamSession {
                 } catch (e) { }
             }
             // Re-send preview on restart so client isn't staring at black screen
-            if (this.active) this.sendPreview();
+            if (this.active && retryCount === 0) this.sendPreview();
         }
 
         console.log(`[StreamSession] Session ended for ${this.deviceId}`);

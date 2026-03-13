@@ -248,7 +248,10 @@ export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, 
 
     return (
         <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-w-[95vw] w-[1400px] h-[90vh] p-0 gap-0 overflow-hidden bg-slate-50/50 backdrop-blur-xl border-slate-200/50 shadow-2xl ring-1 ring-black/5 flex flex-col focus-visible:outline-none">
+            <DialogContent className={cn(
+                "max-w-[95vw] h-[90vh] p-0 gap-0 overflow-hidden bg-slate-50/50 backdrop-blur-xl border-slate-200/50 shadow-2xl ring-1 ring-black/5 flex flex-col focus-visible:outline-none",
+                platform === 'android' ? "w-[1400px]" : "w-[500px]"
+            )}>
                 <input
                     type="file"
                     ref={fileInputRef}
@@ -386,7 +389,7 @@ export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, 
                                 </div>
                             </div>
                             <div className="flex-1 overflow-hidden">
-                                <DevicePlayer agentId={agentId} deviceId={deviceId} socket={socket} readonly={!!isBusy} />
+                                <DevicePlayer agentId={agentId} deviceId={deviceId} socket={socket} platform={platform} readonly={!!isBusy} />
                             </div>
                             {/* Text Send Bar */}
                             <div className="flex items-center gap-1.5 px-2 py-1.5 border-t border-slate-100 bg-slate-50/80">

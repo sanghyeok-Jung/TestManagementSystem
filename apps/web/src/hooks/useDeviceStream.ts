@@ -73,9 +73,13 @@ export const useDeviceStream = ({ agentId, deviceId, socket }: UseDeviceStreamPr
         const handleStreamPreview = (data: { deviceId: string, image: string }) => {
             if (data.deviceId === deviceId) {
                 setPreviewImage(data.image);
+                // For iOS (screenshot-based streaming) the preview IS the stream.
+                // After the first preview frame arrives, mark as "not buffering"
+                // so that the UI shows the image and enables interaction.
                 if (!hasReceivedFrame.current) {
-                    setIsBuffering(true);
+                    hasReceivedFrame.current = true;
                 }
+                setIsBuffering(false);
             }
         };
 

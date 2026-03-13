@@ -66,7 +66,7 @@ export default function App() {
         };
     }, []);
 
-    const [selectedDevice, setSelectedDevice] = useState<{ agentId: string, deviceId: string, initialTab?: 'control' | 'history' } | null>(null);
+    const [selectedDevice, setSelectedDevice] = useState<{ agentId: string, deviceId: string, platform: 'android' | 'ios', initialTab?: 'control' | 'history' } | null>(null);
     const [selectedAgent, setSelectedAgent] = useState<{ agentId: string, initialTab?: 'control' | 'history' } | null>(null);
     const [scriptRunnerOpen, setScriptRunnerOpen] = useState(false);
     const [globalHistoryOpen, setGlobalHistoryOpen] = useState(false);
@@ -78,7 +78,14 @@ export default function App() {
 
     const handleControlDevice = (agentId: string, deviceId: string | null, tab?: 'control' | 'history') => {
         if (deviceId) {
-            setSelectedDevice({ agentId, deviceId, initialTab: tab });
+            const agent = agents.find(a => a.id === agentId);
+            const device = agent?.devices.find(d => d.id === deviceId);
+            setSelectedDevice({ 
+                agentId, 
+                deviceId, 
+                platform: (device?.platform as 'android' | 'ios') || 'android', 
+                initialTab: tab 
+            });
         } else {
             setSelectedAgent({ agentId, initialTab: tab });
         }
@@ -231,6 +238,7 @@ export default function App() {
                     socket={socket}
                     agentId={selectedDevice.agentId}
                     deviceId={selectedDevice.deviceId}
+                    platform={selectedDevice.platform}
                     initialTab={selectedDevice.initialTab}
                     onClose={() => setSelectedDevice(null)}
                 />

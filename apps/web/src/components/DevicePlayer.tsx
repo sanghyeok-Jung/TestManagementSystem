@@ -24,17 +24,36 @@ export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, s
         });
     };
 
-    const canInteract = !_readonly && (!isBuffering || videoDimensions.vw > 0);
+    // iOS screenshot-based streaming: previewImage keeps updating = live stream
+    const isPreviewBasedStream = !isBuffering && previewImage && videoDimensions.vw === 0;
+
+    const canInteract = !_readonly && (!isBuffering || videoDimensions.vw > 0 || !!isPreviewBasedStream);
 
     return (
         <div className="w-full h-full relative select-none bg-black">
 
-            {/* Screenshot preview — shown instantly while waiting for live stream */}
+            {/* Screenshot preview — shown while buffering (waiting for stream) */}
             {previewImage && isBuffering && (
                 <img
                     src={previewImage}
                     alt="Device preview"
                     className="absolute inset-0 w-full h-full object-contain z-5 pointer-events-none"
+                />
+            )}
+
+            {/* iOS live preview — shown as interactive stream when no H264 video */}
+            {isPreviewBasedStream && (
+                <img
+                    src={previewImage}
+                    alt="Device stream"
+                    className={cn(
+                        "absolute inset-0 w-full h-full object-contain z-10",
+                        canInteract ? "cursor-crosshair pointer-events-auto" : "cursor-default pointer-events-none"
+                    )}
+                    onMouseDown={canInteract ? (e) => handleInteraction(e, 'down') : undefined}
+                    onMouseUp={canInteract ? (e) => handleInteraction(e, 'up') : undefined}
+                    onMouseLeave={canInteract ? resetInteraction : undefined}
+                    draggable={false}
                 />
             )}
 
@@ -74,11 +93,11 @@ export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, s
             {/* FPS + Dimensions (debug) */}
             {!isBuffering && (
                 <div className="absolute top-2 right-2 z-20 px-2 py-1 bg-black/50 text-green-400 text-[10px] font-mono rounded pointer-events-none">
-                    FPS: {fps} | {videoDimensions.vw}x{videoDimensions.vh}
+                    {isPreviewBasedStream ? 'LIVE' : `FPS: ${fps}`} | {videoDimensions.vw > 0 ? `${videoDimensions.vw}x${videoDimensions.vh}` : 'Screenshot'}
                 </div>
             )}
 
-            {/* Video: fills container, maintains aspect ratio via object-contain */}
+            {/* Video: fills container — used for Android H264 streams */}
             <video
                 ref={videoRef}
                 autoPlay
@@ -86,12 +105,12 @@ export const DevicePlayer: React.FC<DevicePlayerProps> = ({ agentId, deviceId, s
                 playsInline
                 className={cn(
                     "w-full h-full object-contain transition-opacity duration-500",
-                    isBuffering ? "opacity-0" : "opacity-100",
-                    canInteract ? "cursor-crosshair pointer-events-auto" : "cursor-default pointer-events-none"
+                    (isBuffering || isPreviewBasedStream) ? "opacity-0" : "opacity-100",
+                    (!isPreviewBasedStream && canInteract) ? "cursor-crosshair pointer-events-auto" : "cursor-default pointer-events-none"
                 )}
-                onMouseDown={canInteract ? (e) => handleInteraction(e, 'down') : undefined}
-                onMouseUp={canInteract ? (e) => handleInteraction(e, 'up') : undefined}
-                onMouseLeave={canInteract ? resetInteraction : undefined}
+                onMouseDown={(!isPreviewBasedStream && canInteract) ? (e) => handleInteraction(e, 'down') : undefined}
+                onMouseUp={(!isPreviewBasedStream && canInteract) ? (e) => handleInteraction(e, 'up') : undefined}
+                onMouseLeave={(!isPreviewBasedStream && canInteract) ? resetInteraction : undefined}
             />
         </div>
     );

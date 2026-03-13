@@ -100,18 +100,16 @@ const AgentDeviceItem = ({ agentId, device, onControlDevice, onMenuToggle }: { a
                         className="absolute right-0 top-10 w-44 bg-white border border-slate-200 shadow-xl rounded-xl py-1.5 z-50 animate-in fade-in zoom-in-95"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {device.platform === 'android' && (
-                            <button
-                                className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                onClick={() => { setMenuOpen(false); onControlDevice(agentId, device.id, 'control'); }}
-                                disabled={device.status === 'offline'}
-                            >
-                                <div className="bg-blue-50 p-1.5 rounded-md text-blue-600">
-                                    <Monitor size={14} />
-                                </div>
-                                Remote Control
-                            </button>
-                        )}
+                        <button
+                            className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            onClick={() => { setMenuOpen(false); onControlDevice(agentId, device.id, 'control'); }}
+                            disabled={device.status === 'offline'}
+                        >
+                            <div className="bg-blue-50 p-1.5 rounded-md text-blue-600">
+                                <Monitor size={14} />
+                            </div>
+                            Remote Control
+                        </button>
                         <button
                             className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors mt-0.5"
                             onClick={() => { setMenuOpen(false); onControlDevice(agentId, device.id, 'history'); }}

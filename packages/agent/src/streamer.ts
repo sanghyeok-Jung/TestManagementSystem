@@ -1,5 +1,8 @@
 import execa from 'execa';
 import { Socket } from 'socket.io-client';
+import path from 'path';
+import fs from 'fs';
+import { IDeviceManager } from './handlers/device-manager';
 
 class StreamSession {
     private active = true;
@@ -9,38 +12,20 @@ class StreamSession {
     constructor(
         private deviceId: string,
         private agentId: string,
-        private socket: Socket
+        private socket: Socket,
+        private platform: 'android' | 'ios',
+        private manager: IDeviceManager
     ) { }
 
     private async getRealDimensions(): Promise<{ w: number, h: number, rotation: number }> {
         try {
-            const { stdout } = await execa('adb', ['-s', this.deviceId, 'shell', 'dumpsys display']);
-            const overrideIdx = stdout.indexOf('mOverrideDisplayInfo');
-            if (overrideIdx !== -1) {
-                // Use 2000 chars — enough to pass the long modes[] list and reach "rotation N"
-                const block = stdout.slice(overrideIdx, overrideIdx + 2000);
-                const realMatch = block.match(/real (\d+) x (\d+)/);
-                const rotMatch = block.match(/rotation (\d)/);
-                if (realMatch) {
-                    const w = parseInt(realMatch[1]);
-                    const h = parseInt(realMatch[2]);
-                    // Infer rotation from w/h when regex can't reach the rotation field
-                    const rotation = rotMatch ? parseInt(rotMatch[1]) : (w > h ? 1 : 0);
-                    return { w, h, rotation };
-                }
+            const metadata = await this.manager.getMetadata(this.deviceId);
+            if (metadata) {
+                return { w: metadata.width, h: metadata.height, rotation: metadata.rotation };
             }
-        } catch (e) { }
-
-        // Fallback: wm size (always portrait base dims) + infer orientation
-        try {
-            const { stdout } = await execa('adb', ['-s', this.deviceId, 'shell', 'wm size']);
-            const match = stdout.match(/Override size: (\d+)x(\d+)/) || stdout.match(/Physical size: (\d+)x(\d+)/);
-            if (match) {
-                const w = parseInt(match[1]);
-                const h = parseInt(match[2]);
-                return { w, h, rotation: w > h ? 1 : 0 };
-            }
-        } catch (e) { }
+        } catch (e) {
+            console.error(`[StreamSession] Failed to get metadata for ${this.deviceId}:`, e);
+        }
 
         return { w: 720, h: 1560, rotation: 0 };
     }
@@ -63,9 +48,11 @@ class StreamSession {
         console.log(`[StreamSession] Starting session for ${this.deviceId}`);
 
         // Auto-wake device
-        try {
-            await execa('adb', ['-s', this.deviceId, 'shell', 'input', 'keyevent', '224']);
-        } catch (e) { }
+        if (this.platform === 'android') {
+            try {
+                await execa('adb', ['-s', this.deviceId, 'shell', 'input', 'keyevent', '224']);
+            } catch (e) { }
+        }
 
         // Initial preview
         this.sendPreview();
@@ -86,9 +73,11 @@ class StreamSession {
             await new Promise(r => setTimeout(r, 300));
 
             // Re-wake before restart
-            try {
-                await execa('adb', ['-s', this.deviceId, 'shell', 'input', 'keyevent', '224']);
-            } catch (e) { }
+            if (this.platform === 'android') {
+                try {
+                    await execa('adb', ['-s', this.deviceId, 'shell', 'input', 'keyevent', '224']);
+                } catch (e) { }
+            }
             // Re-send preview on restart so client isn't staring at black screen
             if (this.active) this.sendPreview();
         }
@@ -98,6 +87,11 @@ class StreamSession {
 
     async stop() {
         this.active = false;
+        // Destroy MJPEG HTTP request if active (iOS)
+        if ((this as any)._mjpegRequest) {
+            (this as any)._mjpegRequest.destroy();
+            (this as any)._mjpegRequest = null;
+        }
         if (this.process) {
             console.log(`[StreamSession] Killing process for ${this.deviceId}`);
             this.process.kill();
@@ -106,16 +100,144 @@ class StreamSession {
         }
     }
 
-    private async runProcess(size: string) {
-        console.log(`[StreamSession] Spawning screenrecord for ${this.deviceId}...`);
+    private async findIosBinary(): Promise<string> {
+        try { await execa('ios', ['--version']); return 'ios'; } catch (e) { }
+        try { await execa('go-ios', ['--version']); return 'go-ios'; } catch (e) { }
+        const arch = process.arch === 'x64' ? 'amd64' : process.arch;
+        const plat = process.platform === 'darwin' ? 'darwin' : process.platform;
+        const localPaths = [
+            path.resolve(process.cwd(), `node_modules/go-ios/dist/go-ios-${plat}-${arch}_${plat}_${arch}/ios`),
+            path.resolve(process.cwd(), `../node_modules/go-ios/dist/go-ios-${plat}-${arch}_${plat}_${arch}/ios`),
+            path.resolve(__dirname, `../../node_modules/go-ios/dist/go-ios-${plat}-${arch}_${plat}_${arch}/ios`),
+        ];
+        for (const p of localPaths) {
+            if (fs.existsSync(p)) return p;
+        }
+        throw new Error('go-ios binary not found. Please run: brew install danielpaulus/tap/go-ios');
+    }
 
+    /**
+     * iOS streaming: connect to WDA's MJPEG server and parse individual JPEG frames
+     * from the multipart boundary HTTP response.
+     */
+    private async runIosMjpegStream() {
+        // Get the MJPEG port from the device manager
+        if (!this.manager.getMjpegPort) {
+            console.error('[StreamSession] Device manager does not support getMjpegPort');
+            return;
+        }
+
+        const mjpegPort = await this.manager.getMjpegPort(this.deviceId);
+        if (!mjpegPort) {
+            console.error('[StreamSession] Could not get MJPEG port for', this.deviceId);
+            return;
+        }
+
+        const url = `http://127.0.0.1:${mjpegPort}`;
+        console.log(`[StreamSession] Connecting to WDA MJPEG stream at ${url}`);
+
+        const http = await import('http');
+
+        return new Promise<void>((resolve) => {
+            const req = http.get(url, (res) => {
+                if (res.statusCode !== 200) {
+                    console.error(`[StreamSession] MJPEG server returned status ${res.statusCode}`);
+                    resolve();
+                    return;
+                }
+
+                let buffer = Buffer.alloc(0);
+                const BOUNDARY = Buffer.from('--BoundaryString');
+                const CRLFCRLF = Buffer.from('\r\n\r\n'); // separates headers from jpeg data
+                let frameCount = 0;
+
+                res.on('data', (chunk: Buffer) => {
+                    if (!this.active) {
+                        req.destroy();
+                        return;
+                    }
+
+                    buffer = Buffer.concat([buffer, chunk]);
+
+                    // Parse frames from the multipart stream
+                    while (true) {
+                        const boundaryIdx = buffer.indexOf(BOUNDARY);
+                        if (boundaryIdx === -1) break;
+
+                        // Find the next boundary to know where this frame ends
+                        const nextBoundaryIdx = buffer.indexOf(BOUNDARY, boundaryIdx + BOUNDARY.length);
+                        if (nextBoundaryIdx === -1) break; // Wait for more data
+
+                        // Extract the frame section (between two boundaries)
+                        const frameSection = buffer.slice(boundaryIdx + BOUNDARY.length, nextBoundaryIdx);
+
+                        // Find the header/body separator
+                        const headerEnd = frameSection.indexOf(CRLFCRLF);
+                        if (headerEnd !== -1) {
+                            const jpegData = frameSection.slice(headerEnd + CRLFCRLF.length);
+
+                            // Validate it's actually JPEG (starts with FF D8)
+                            if (jpegData.length > 2 && jpegData[0] === 0xFF && jpegData[1] === 0xD8) {
+                                const base64 = jpegData.toString('base64');
+                                this.socket.emit('stream_preview', {
+                                    deviceId: this.deviceId,
+                                    image: `data:image/jpeg;base64,${base64}`,
+                                });
+                                frameCount++;
+                                if (frameCount % 100 === 1) {
+                                    console.log(`[StreamSession] MJPEG frame #${frameCount} (${(jpegData.length / 1024).toFixed(0)}KB) for ${this.deviceId}`);
+                                }
+                            }
+                        }
+
+                        // Consume processed data
+                        buffer = buffer.slice(nextBoundaryIdx);
+                    }
+
+                    // Prevent buffer from growing unbounded
+                    if (buffer.length > 5 * 1024 * 1024) {
+                        buffer = buffer.slice(buffer.length - 1024 * 1024);
+                    }
+                });
+
+                res.on('end', () => {
+                    console.log(`[StreamSession] MJPEG stream ended for ${this.deviceId}`);
+                    resolve();
+                });
+
+                res.on('error', (err) => {
+                    console.error(`[StreamSession] MJPEG stream error:`, err.message);
+                    resolve();
+                });
+            });
+
+            req.on('error', (err) => {
+                console.error(`[StreamSession] MJPEG connection error:`, err.message);
+                resolve();
+            });
+
+            // Store a reference so we can abort on stop
+            (this as any)._mjpegRequest = req;
+        });
+    }
+
+    private async runProcess(size: string) {
+        console.log(`[StreamSession] Spawning screen streamer for ${this.deviceId} (${this.platform})...`);
+
+        if (this.platform === 'ios') {
+            // iOS: connect to WDA's built-in MJPEG server for real-time streaming
+            await this.runIosMjpegStream();
+            return;
+        }
+
+        // Android: H264 screen recording via adb
         this.process = execa('adb', [
             '-s', this.deviceId,
             'shell', 'screenrecord',
             '--output-format=h264',
-            '--bit-rate', '1000000',  // 1Mbps: sufficient quality at 360p
+            '--bit-rate', '1000000',
             '--size', size,
-            '--time-limit', '45',     // 45s: balance between I-frame refresh and reconnect frequency
+            '--time-limit', '45',
             '-'
         ], {
             stdio: ['ignore', 'pipe', 'pipe'],
@@ -132,7 +254,7 @@ class StreamSession {
 
         if (this.process.stderr) {
             this.process.stderr.on('data', (data) => {
-                console.error(`[StreamSession] screenrecord stderr: ${data.toString()}`);
+                console.error(`[StreamSession] streamer stderr: ${data.toString()}`);
             });
         }
 
@@ -155,7 +277,6 @@ class StreamSession {
         try {
             await this.process;
         } catch (e: any) {
-            // Ignore valid kills
             if (e.signal !== 'SIGTERM' && e.signal !== 'SIGINT' && e.signal !== 'SIGKILL' && !e.killed) {
                 console.error(`[StreamSession] Process error:`, e.message);
             }
@@ -167,6 +288,30 @@ class StreamSession {
 
     private async sendPreview() {
         if (!this.active) return;
+        
+        if (this.platform === 'ios') {
+            // iOS: take a single screenshot for preview
+            try {
+                const binary = await this.findIosBinary();
+                const tmpFile = path.join('/tmp', `ios_preview_${this.deviceId}.png`);
+                await execa(binary, [
+                    'screenshot',
+                    '--output=' + tmpFile,
+                    '--udid=' + this.deviceId,
+                ], { env: { ...process.env, ENABLE_GO_IOS_AGENT: 'user' }, timeout: 10000 });
+                const imgBuffer = fs.readFileSync(tmpFile);
+                const base64 = imgBuffer.toString('base64');
+                this.socket.emit('stream_preview', {
+                    deviceId: this.deviceId,
+                    image: `data:image/png;base64,${base64}`,
+                });
+                try { fs.unlinkSync(tmpFile); } catch (_) { }
+            } catch (e: any) {
+                console.warn(`[StreamSession] iOS preview failed:`, e.message);
+            }
+            return;
+        }
+
         try {
             const { stdout } = await execa('adb', ['-s', this.deviceId, 'exec-out', 'screencap', '-p'], {
                 encoding: null,
@@ -190,18 +335,24 @@ export class Streamer {
     private agentId: string;
     private socket: Socket;
 
-    constructor(agentId: string, socket: Socket) {
+    constructor(agentId: string, socket: Socket, private deviceManagers: Map<string, IDeviceManager>) {
         this.agentId = agentId;
         this.socket = socket;
     }
 
-    async start(deviceId: string) {
+    async start(deviceId: string, platform: 'android' | 'ios') {
         if (this.sessions.has(deviceId)) {
             console.log(`[Streamer] Session already exists for ${deviceId}, restarting...`);
             await this.stop(deviceId);
         }
 
-        const session = new StreamSession(deviceId, this.agentId, this.socket);
+        const manager = this.deviceManagers.get(deviceId);
+        if (!manager) {
+            console.error(`[Streamer] No device manager found for ${deviceId}`);
+            return;
+        }
+
+        const session = new StreamSession(deviceId, this.agentId, this.socket, platform, manager);
         this.sessions.set(deviceId, session);
 
         // Start session in background (it runs its own loop)

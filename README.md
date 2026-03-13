@@ -12,8 +12,10 @@
 ## ✨ Key Features
 
 - **🌐 Centralized Web Dashboard:** A responsive React 18 + Vite frontend built with Tailwind CSS and Radix UI to control your entire lab.
-- **📱 Real-time Device Remote Control:** Stream device screens in real-time. Full remote interaction (Tap, Swipe, Home, Back, App Switch, Screen Rotation).
-- **📦 Effortless App Installation:** Automatically process and install `.aab` (Android App Bundle) directly to remote devices using local `bundletool`.
+- **📱 Real-time Device Remote Control:** Stream device screens in real-time with full remote interaction.
+  - **Android:** H.264 live streaming via `adb screenrecord`. Supports Tap, Swipe, Home, Back, App Switch, and Screen Rotation.
+  - **iOS:** MJPEG real-time streaming via WebDriverAgent's built-in server. Supports Tap, Swipe, Home, Power (Lock/Unlock), Volume Up/Down, and IPA installation. Requires USB connection with `iproxy` port forwarding.
+- **📦 Effortless App Installation:** Install `.aab` (Android App Bundle) via `bundletool`, `.apk` directly via `adb`, and `.ipa` via `ideviceinstaller` for iOS.
 - **🖥️ Native Node Shell & ADB Shell:** Access high-performance interactive shells. Supports both ADB Shell for devices and **Native Node Shell (with PTY simulation)** for the host agent.
 - **🚀 Job Type Segregation:** Clearly separate **Mobile Testing** (Android/iOS) from **Node Farm Testing** (API/Browser). Run automated tasks directly on the Agent host without needing physical devices.
 - **⏰ Automated Task Scheduling:** Orchestrate periodic test executions using flexible Cron expressions. Create, manage, and monitor recurring test jobs across specific agents and devices.
@@ -38,8 +40,40 @@ This repository is structured as a **Turborepo** monorepo containing the followi
 - [Node.js](https://nodejs.org/) (v18 or higher recommended)
 - `npm` or `yarn` or `pnpm`
 - **For Android Devices:** Android SDK Platform-Tools (`adb` must be in your system PATH)
-- **For iOS Devices:** `libimobiledevice` (specifically `idevice_id` and `ideviceinfo`)
+- **For iOS Devices:** `libimobiledevice` (specifically `idevice_id`, `ideviceinfo`, `ideviceinstaller`)
 - **For `.aab` Installation:** `java` must be installed and `bundletool.jar` / `debug.keystore` must be placed in a `tools/` directory.
+
+### Screen Mirroring Requirements
+
+Device screen mirroring requires additional tools depending on the platform:
+
+#### Android
+- `adb` (Android Debug Bridge) — included in Android SDK Platform-Tools
+- USB Debugging must be enabled on the device
+- No additional setup required; streaming uses `adb shell screenrecord` (H.264)
+
+#### iOS
+iOS mirroring relies on **WebDriverAgent (WDA)** and **go-ios** for USB communication.
+
+| Tool | Purpose | Install |
+|------|---------|--------|
+| `go-ios` | iOS USB tunnel, screenshot, device info | `brew install danielpaulus/tap/go-ios` |
+| `iproxy` | USB port forwarding (WDA + MJPEG) | `brew install libimobiledevice` |
+| `idevice_id` / `ideviceinfo` | Device detection and metadata | `brew install libimobiledevice` |
+| `ideviceinstaller` | IPA installation | `brew install ideviceinstaller` |
+| **WebDriverAgent** | Touch input relay + MJPEG streaming server | Built & deployed via Xcode (see below) |
+
+> **WebDriverAgent Setup (Required for iOS mirroring)**
+>
+> WDA must be pre-installed and running on the iOS device:
+> 1. Clone [appium/WebDriverAgent](https://github.com/appium/WebDriverAgent)
+> 2. Open `WebDriverAgent.xcodeproj` in Xcode
+> 3. Set your development team in Signing & Capabilities
+> 4. Build and run `WebDriverAgentRunner` on your target device
+> 5. WDA listens on device port `8100` (control) and `9100` (MJPEG stream)
+> 6. The agent automatically forwards these ports via `iproxy`
+>
+> For iOS 17+, the agent uses `go-ios tunnel start --userspace` for USB tunneling.
 
 ### 1. Installation
 

@@ -21,18 +21,30 @@ export const useDeviceInteraction = ({ agentId, deviceId, socket, videoDimension
      * Uses videoDimensions from state (updated via loadedmetadata) so rotation
      * changes are reflected immediately without relying on event-time DOM reads.
      */
-    const getContentCoords = useCallback((e: React.MouseEvent<HTMLVideoElement>) => {
-        const video = e.currentTarget;
+    const getContentCoords = useCallback((e: React.MouseEvent<HTMLElement>) => {
+        const el = e.currentTarget;
         // Use state-driven dimensions (updated on loadedmetadata) as primary source,
-        // fall back to DOM property for initial portrait load before first reset
-        const vw = videoDimensions.vw || video.videoWidth;
-        const vh = videoDimensions.vh || video.videoHeight;
-        const cw = video.clientWidth;
-        const ch = video.clientHeight;
+        // fall back to DOM property for initial portrait load before first reset.
+        // For <img> elements (iOS), use naturalWidth/naturalHeight.
+        let vw = videoDimensions.vw || 0;
+        let vh = videoDimensions.vh || 0;
+
+        if (!vw || !vh) {
+            if (el instanceof HTMLVideoElement) {
+                vw = el.videoWidth || 0;
+                vh = el.videoHeight || 0;
+            } else if (el instanceof HTMLImageElement) {
+                vw = el.naturalWidth || 0;
+                vh = el.naturalHeight || 0;
+            }
+        }
+
+        const cw = el.clientWidth;
+        const ch = el.clientHeight;
 
         if (!cw || !ch) return null;
 
-        // When no video frames decoded yet (screen off), use simple relative coords
+        // When no content dimensions available (screen off), use simple relative coords
         if (!vw || !vh) {
             return {
                 x: Math.max(0, Math.min(1, e.nativeEvent.offsetX / cw)),
@@ -71,7 +83,7 @@ export const useDeviceInteraction = ({ agentId, deviceId, socket, videoDimension
     }, [videoDimensions]);
 
     const handleInteraction = useCallback((
-        e: React.MouseEvent<HTMLVideoElement>,
+        e: React.MouseEvent<HTMLElement>,
         type: 'down' | 'up'
     ) => {
 

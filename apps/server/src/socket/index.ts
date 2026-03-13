@@ -130,7 +130,6 @@ export function setupSocketHandlers(io: Server, agents: Map<string, Agent>, devi
             if (agentId) {
                 const room = `stream:${agentId}:${data.deviceId}`;
                 socket.to(room).emit('stream_preview', data);
-                console.log(`[Stream] Preview relayed for ${data.deviceId}`);
             }
         });
 

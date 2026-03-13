@@ -3,7 +3,7 @@ import { Socket } from 'socket.io-client';
 import { DevicePlayer } from './DevicePlayer';
 import { ShellTerminal } from './ShellTerminal';
 import { LogcatViewer, LogcatViewerHandle } from './LogcatViewer';
-import { Play, Pause, Trash, MousePointer2, Upload, Download, Loader2, Eraser, Power, Volume2, Volume1, Home, ChevronLeft, Lock, TerminalSquare, RotateCcw, RotateCw, AppWindow, SendHorizontal } from 'lucide-react';
+import { Play, Pause, Trash, MousePointer2, Upload, Download, Loader2, Eraser, Power, Volume2, Volume1, Home, ChevronLeft, Lock, RotateCw, AppWindow, SendHorizontal } from 'lucide-react';
 import { DeviceHistoryPanel } from './DeviceHistoryPanel';
 import { cn } from "@/lib/utils";
 import {
@@ -21,11 +21,12 @@ interface DeviceControlPanelProps {
     socket: Socket;
     agentId: string;
     deviceId: string;
+    platform: 'android' | 'ios';
     initialTab?: 'control' | 'history';
     onClose: () => void;
 }
 
-export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, agentId, deviceId, initialTab = 'control', onClose }) => {
+export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, agentId, deviceId, platform, initialTab = 'control', onClose }) => {
     const logcatRef = useRef<LogcatViewerHandle>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const installInputRef = useRef<HTMLInputElement>(null);
@@ -274,7 +275,7 @@ export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, 
                                         activeTab === 'control' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
                                     )}
                                 >
-                                    <TerminalSquare size={14} />
+                                    <Power size={14} />
                                     Live Control
                                 </button>
                                 <button
@@ -284,7 +285,7 @@ export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, 
                                         activeTab === 'history' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
                                     )}
                                 >
-                                    <RotateCcw size={14} />
+                                    <RotateCw size={14} />
                                     Automation History
                                 </button>
                             </div>
@@ -323,8 +324,11 @@ export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, 
                     </div>
                 ) : (
                     <div className="flex-1 grid grid-cols-12 gap-4 p-4 min-h-0 overflow-hidden bg-slate-50/30">
-                        {/* Live Stream Section (Column 1) */}
-                        <Card className="col-span-12 lg:col-span-4 h-full flex flex-col overflow-hidden border-slate-200/60 shadow-sm bg-white/50 backdrop-blur-sm">
+                        {/* Live Stream Section — full-width for iOS, left column for Android */}
+                        <Card className={cn(
+                            "h-full flex flex-col overflow-hidden border-slate-200/60 shadow-sm bg-white/50 backdrop-blur-sm",
+                            platform === 'ios' ? "col-span-12" : "col-span-12 lg:col-span-4"
+                        )}>
                             <div className="p-3 border-b border-slate-100 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
@@ -333,7 +337,7 @@ export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, 
                                     </h3>
                                 </div>
                                 <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg border border-slate-200">
-                                    <Button disabled={isBusy} variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-red-500 hover:bg-red-50" onClick={() => handleKeyPress(26)} title="Power">
+                                    <Button disabled={isBusy} variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-red-500 hover:bg-red-50" onClick={() => handleKeyPress(platform === 'android' ? 26 : 0)} title="Power">
                                         <Power size={12} />
                                     </Button>
                                     <Button disabled={isBusy} variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-slate-700" onClick={() => handleKeyPress(24)} title="Volume Up">
@@ -343,19 +347,42 @@ export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, 
                                         <Volume1 size={12} />
                                     </Button>
                                     <div className="w-px h-3 bg-slate-300" />
-                                    <Button disabled={isBusy} variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-slate-700" onClick={() => handleKeyPress(187)} title="Recent Apps">
-                                        <AppWindow size={12} />
-                                    </Button>
+                                    {platform === 'android' && (
+                                        <Button disabled={isBusy} variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-slate-700" onClick={() => handleKeyPress(187)} title="Recent Apps">
+                                            <AppWindow size={12} />
+                                        </Button>
+                                    )}
                                     <Button disabled={isBusy} variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-slate-700" onClick={() => handleKeyPress(3)} title="Home">
                                         <Home size={12} />
                                     </Button>
-                                    <Button disabled={isBusy} variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-slate-700" onClick={() => handleKeyPress(4)} title="Back">
-                                        <ChevronLeft size={12} />
-                                    </Button>
-                                    <div className="w-px h-3 bg-slate-300" />
-                                    <Button disabled={isBusy} variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-blue-500 hover:bg-blue-50" onClick={handleRotate} title="Rotate Screen (90°)">
-                                        <RotateCw size={12} />
-                                    </Button>
+                                    {platform === 'android' && (
+                                        <Button disabled={isBusy} variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-slate-700" onClick={() => handleKeyPress(4)} title="Back">
+                                            <ChevronLeft size={12} />
+                                        </Button>
+                                    )}
+                                    {platform === 'android' && (
+                                        <>
+                                            <div className="w-px h-3 bg-slate-300" />
+                                            <Button disabled={isBusy} variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-blue-500 hover:bg-blue-50" onClick={handleRotate} title="Rotate Screen (90°)">
+                                                <RotateCw size={12} />
+                                            </Button>
+                                        </>
+                                    )}
+                                    {platform === 'ios' && (
+                                        <>
+                                            <div className="w-px h-3 bg-slate-300" />
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 text-slate-500 hover:text-emerald-500 hover:bg-emerald-50"
+                                                onClick={handleInstallClick}
+                                                disabled={isTransferring || isBusy}
+                                                title="Install IPA"
+                                            >
+                                                {isTransferring ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} className="rotate-90" />}
+                                            </Button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex-1 overflow-hidden">
@@ -395,9 +422,10 @@ export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, 
                             </div>
                         </Card>
 
-                        {/* Controls Section (Column 2 - Stacked) */}
+                        {/* Controls Section (Column 2 - Android only) */}
+                        {platform === 'android' && (
                         <div className="col-span-12 lg:col-span-8 h-full flex flex-col gap-4 min-h-0 overflow-hidden">
-                            {/* ADB Shell Section (Top) */}
+                            {/* Terminal Section (Top) */}
                             <Card className="flex-1 min-h-0 flex flex-col overflow-hidden border-slate-200/60 shadow-sm bg-slate-900 ring-1 ring-white/5">
                                 <div className="p-3 border-b border-white/5 flex items-center justify-between">
                                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">ADB Terminal</h3>
@@ -501,6 +529,7 @@ export const DeviceControlPanel: React.FC<DeviceControlPanelProps> = ({ socket, 
                                 </div>
                             </Card>
                         </div>
+                        )}
                     </div>
                 )}
             </DialogContent>

@@ -13,5 +13,8 @@
     "workspaces": [
         "apps/*",
         "packages/*"
-    ]
+    ],
+    "dependencies": {
+        "go-ios": "^1.0.188"
+    }
 }

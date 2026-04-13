@@ -19,6 +19,10 @@
 - **🖥️ Native Node Shell & ADB Shell:** Access high-performance interactive shells. Supports both ADB Shell for devices and **Native Node Shell (with PTY simulation)** for the host agent.
 - **🚀 Job Type Segregation:** Clearly separate **Mobile Testing** (Android/iOS) from **Node Farm Testing** (API/Browser). Run automated tasks directly on the Agent host without needing physical devices.
 - **⏰ Automated Task Scheduling:** Orchestrate periodic test executions using flexible Cron expressions. Create, manage, and monitor recurring test jobs across specific agents and devices.
+- **🧪 Test Case & Suite Management:** A comprehensive system to manage your testing lifecycle.
+  - **Hierarchical Organization:** Structure tests into nested suites and sub-suites for complex projects.
+  - **Flexible Test Cases:** Create standalone test cases or group them within specific suites.
+  - **Trash Bin (Soft Delete):** Safely manage deleted data with the ability to restore or permanently remove test suites and cases.
 - **🔌 Agent-based Architecture:** Run lightweight Node.js agents on any macOS/Windows machine to connect physical devices instantly to the central hub.
 
 ---

@@ -99,3 +99,54 @@ export interface TestSchedule {
   lastRunAt?: number;
   nextRunAt?: number;
 }
+
+export interface TestCaseStep {
+  action: string;
+  expectedResult: string;
+}
+
+export interface TestCaseHistoryEntry {
+  version: number;
+  updatedAt: number;
+  changes?: string; // Optional message describing changes
+}
+
+export interface TestSuite {
+  id: string;
+  name: string;
+  description?: string;
+  parentId?: string | null;
+  isDeleted?: boolean;
+  deletedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type TestSuiteCreateInput = Omit<TestSuite, 'id' | 'createdAt' | 'updatedAt'>;
+export type TestSuiteUpdateInput = Partial<TestSuiteCreateInput>;
+
+export interface TestCase {
+  id: string;
+  suiteId?: string | null; // Optional now, test cases can exist without a suite
+  projectId?: string;
+  title: string;
+  description?: string;
+  preconditions?: string;
+  steps: TestCaseStep[];
+  expectedResult?: string; // Optional top-level overall expected result
+  status: 'draft' | 'active' | 'deprecated';
+  priority: 'high' | 'medium' | 'low';
+  type: 'auto' | 'manual';
+  links?: string[];
+  version: number;
+  history?: TestCaseHistoryEntry[];
+  isDeleted?: boolean;
+  deletedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type TestCaseCreateInput = Omit<TestCase, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'history'>;
+export type TestCaseUpdateInput = Partial<TestCaseCreateInput> & {
+  changeReason?: string; // Optional field passed dynamically to log the history
+};

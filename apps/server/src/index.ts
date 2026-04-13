@@ -13,6 +13,10 @@ import { setupSocketHandlers } from './socket';
 import projectRoutes from './routes/projects';
 import jobRoutes from './routes/jobs';
 import scheduleRoutes from './routes/schedules';
+import testCaseRoutes from './routes/testCases';
+import testSuiteRoutes from './routes/testSuites';
+import { TestCaseManager } from './testCases';
+import { TestSuiteManager } from './testSuites';
 
 const fastify = Fastify({ logger: true });
 
@@ -28,6 +32,8 @@ fs.ensureDirSync(UPLOAD_DIR);
 
 const projectManager = new ProjectManager();
 const jobManager = new JobManager();
+const testCaseManager = new TestCaseManager();
+const testSuiteManager = new TestSuiteManager(testCaseManager);
 
 // Socket.io for Control Channel
 const io = new Server(fastify.server, {
@@ -56,6 +62,8 @@ fastify.register(async (instance) => {
     await projectRoutes(instance, { projectManager });
     await jobRoutes(instance, { jobManager, io });
     await scheduleRoutes(instance, { scheduleManager });
+    await testCaseRoutes(instance, { testCaseManager });
+    await testSuiteRoutes(instance, { testSuiteManager });
 });
 
 fastify.get('/', async (request, reply) => {
